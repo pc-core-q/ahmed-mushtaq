@@ -2,6 +2,7 @@
    admin.js
    منطق لوحة تحكم الأدمن بالكامل (admin.html). 
    تم التحديث: تقييد استيراد الإكسل بـ 50 منتج متوفر، ومزامنة Algolia التلقائية.
+   تم التحديث: عمود المنتجات في جدول الطلبات يُرسم كقائمة (orderItemsHtml).
    ========================================================================== */
 
 let editingProductId = null;
@@ -1269,6 +1270,27 @@ window.updateOrderInFirebase = async function(orderId, patch) {
     }
 };
 
+/* قائمة منتجات الطلب: كل منتج في سطر (شارة الكمية + الاسم + اللون/المقاس).
+   التنسيق في style.css ← .order-items */
+function orderItemsHtml(order) {
+  let items = order && order.items;
+  if (items && !Array.isArray(items)) items = Object.values(items);
+  if (!items || !items.length) return '<span class="order-items-empty">—</span>';
+
+  return '<ul class="order-items">' + items.map(function (it) {
+    const opts = [];
+    if (it.color) opts.push(escapeHtml(String(it.color)));
+    if (it.size) opts.push(escapeHtml(String(it.size)));
+    if (!opts.length && it.variant) opts.push(escapeHtml(String(it.variant)));
+
+    return '<li class="order-item">' +
+      '<span class="order-item-qty">×' + (Number(it.qty) || 1) + '</span>' +
+      '<span class="order-item-name">' + escapeHtml(String(it.name || "")) +
+        (opts.length ? '<small>' + opts.join(" / ") + '</small>' : '') +
+      '</span></li>';
+  }).join("") + '</ul>';
+}
+
 function renderOrdersTable() {
   const tbody = document.getElementById("ordersTableBody");
   if (!tbody) return;
@@ -1281,13 +1303,6 @@ function renderOrdersTable() {
 
   tbody.innerHTML = orders.map(function (o) {
     const date = new Date(o.date).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" });
-    const summary = (o.items || []).map(function (it) {
-      const opts = [];
-      if (it.color) opts.push(escapeHtml(it.color));
-      if (it.size) opts.push(escapeHtml(it.size));
-      if (!opts.length && it.variant) opts.push(escapeHtml(it.variant));
-      return escapeHtml(it.name) + (opts.length ? " (" + opts.join(" / ") + ")" : "") + " ×" + it.qty;
-    }).join("، ");
 
     const cust = o.customer || {};
     let customerHtml = '<span style="color:var(--ink-400);font-size:.85rem;">بدون بيانات توصيل</span>';
@@ -1319,7 +1334,7 @@ function renderOrdersTable() {
         "<td>" + date + "</td>" +
         "<td>" + customerHtml + "</td>" +
         "<td>" + (o.type === "cart" ? "سلة كاملة" : "منتج واحد") + "</td>" +
-        "<td>" + summary + "</td>" +
+        "<td>" + orderItemsHtml(o) + "</td>" +
         "<td>" + formatPrice(o.total) + "</td>" +
         "<td>" + statusHtml + "</td>" + 
       "</tr>"
