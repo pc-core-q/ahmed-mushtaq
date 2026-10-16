@@ -1570,6 +1570,14 @@ td.row-actions>*+*{margin-inline-start:6px}
 .inventory-cell:focus{outline:none;border-color:var(--secondary);box-shadow:var(--ring)}
 #inventoryGrid th{color:var(--text-2);font-weight:700}
 
+/* قائمة منتجات الطلب (عمود "المنتجات" في جدول الطلبات) */
+.order-items{list-style:none;margin:0;padding:0;display:grid;gap:8px;min-width:230px}
+.order-item{display:flex;align-items:flex-start;gap:10px;line-height:1.5}
+.order-item-qty{flex:none;min-width:34px;padding:1px 8px;border-radius:var(--radius-pill);background:var(--secondary-50);border:1px solid var(--secondary-100);color:var(--primary);font-weight:700;font-size:.78rem;text-align:center}
+.order-item-name{min-width:0;color:var(--text);font-weight:600;font-size:.86rem;overflow-wrap:anywhere}
+.order-item-name small{display:block;color:var(--text-2);font-weight:500;font-size:.76rem}
+.order-items-empty{color:var(--text-2)}
+
 /* Modals */
 .modal-overlay{position:fixed;inset:0;z-index:10005;display:none;align-items:center;justify-content:center;padding:16px;background:var(--overlay)}
 .modal-overlay.open{display:flex}
