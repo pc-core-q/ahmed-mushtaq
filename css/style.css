@@ -1273,8 +1273,7 @@ svg[stroke="currentColor"]{stroke-linecap:round;stroke-linejoin:round;stroke-wid
 }
 .field input:focus,.field select:focus,.field textarea:focus{
   border-color:var(--secondary);
-  box-shadow:var(--ring);
-}
+  box-shadow:var(--ring)}
 .field input:disabled,.field select:disabled,.field textarea:disabled,.search-box input:disabled{
   background:var(--surface-2);
   color:var(--ink-300);
@@ -1461,7 +1460,7 @@ body:has(#adminApp){overflow-x:hidden;max-width:100vw}
 }
 .admin-panel>p{color:var(--text-2);font-size:.88rem}
 .panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:18px}
-.panel-head h3{font-size:1.1rem}
+.panel-head h3{margin:0;font-size:1.1rem}
 #adminProductSearch{min-height:40px;border-radius:var(--r-ctl)!important;background:var(--surface);color:var(--text);outline:none;transition:all .2s ease}
 #adminProductSearch:focus{border-color:var(--secondary)!important;box-shadow:var(--ring)}
 
@@ -1562,7 +1561,7 @@ td.row-actions>*+*{margin-inline-start:6px}
   .admin-sidebar{position:fixed;z-index:10000;top:0;bottom:0;right:-300px;width:280px;max-width:85vw;height:auto;transition:right .28s ease-in-out}
   .admin-sidebar.open{right:0;box-shadow:-8px 0 30px rgba(74,21,60,.35)}
   .admin-close-sidebar{display:inline-flex}
-  .admin-main{padding:20px}
+  .admin-main{padding:18px;max-width:100vw;overflow-x:hidden}
   #adminSidebarToggle{display:inline-flex}
 }
 @media(min-width:768px) and (max-width:900px){
@@ -1575,6 +1574,21 @@ td.row-actions>*+*{margin-inline-start:6px}
 @media(max-width:768px){
   .section-head{align-items:center;gap:12px}
   .section-head .btn{min-height:36px;padding:6px 14px;font-size:.8rem}
+
+  /* ---- تحسينات لوحة الأدمن لشاشات الهاتف ---- */
+  .admin-main{padding:14px 12px;width:100%!important;max-width:100vw!important;overflow-x:hidden}
+  .admin-panel{padding:16px 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .panel-head{flex-direction:column;align-items:stretch;gap:12px}
+  .panel-head h3{width:100%;font-size:1.15rem}
+  .panel-head>div{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    width:100%;
+  }
+  .panel-head>div>*{flex:1 1 auto}
+  #adminProductSearch{width:100%!important;margin:0 0 4px}
+  .admin-table{min-width:620px}
 }
 @media(max-width:650px){
   .section{padding:32px 0}
@@ -1604,11 +1618,9 @@ td.row-actions>*+*{margin-inline-start:6px}
   .cart-item>.price{grid-column:2}
   .form-card{padding:24px}
   .value-grid{grid-template-columns:1fr}
-  .admin-stats{grid-template-columns:1fr 1fr}
-  .admin-table{min-width:780px}
-  .admin-panel{padding:16px}
-  .stat-card{padding:16px 14px 14px}
-  .stat-card .num{font-size:1.5rem}
+  .admin-stats{grid-template-columns:1fr 1fr;gap:10px}
+  .stat-card{padding:14px 12px}
+  .stat-card .num{font-size:1.45rem}
   .modal-card{padding:20px}
   .global-search-overlay{padding:0}
   .global-search-container{width:100%;margin:0;height:100dvh;max-height:100dvh;border-radius:0;padding:16px}
@@ -1624,7 +1636,9 @@ td.row-actions>*+*{margin-inline-start:6px}
   .product-grid{gap:10px 8px}
   .feature-card h3{font-size:.92rem}
   .feature-card p{font-size:.78rem}
-  .admin-stats{gap:10px}
+  .admin-stats{gap:8px}
+  .panel-head>div{flex-direction:column}
+  .panel-head>div>*[class*="btn"]{width:100%}
 }
 @media(prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
