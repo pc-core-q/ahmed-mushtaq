@@ -7,10 +7,10 @@
   <!-- العناوين الأساسية لمحركات البحث والمتصفحات -->
   <title>كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة</title>
   <meta name="description" content="تصفّح تشكيلة واسعة من المنتجات المختارة بعناية واطلب مباشرة عبر واتساب مع توصيل سريع لباب بيتك.">
-<link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=65">
-<link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=65">
-<link rel="apple-touch-icon" href="assets/logo/logo.png?v=65">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=65">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=65">
+  <link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=65">
+  <link rel="apple-touch-icon" href="assets/logo/logo.png?v=65">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=65">
 
   <!-- ========================================== -->
   <!-- تهيئة الروابط للمشاركة (WhatsApp / Telegram / Social) -->
@@ -21,14 +21,14 @@
   <meta property="og:site_name" content="كوزمتك احمد مشتاق">
   <meta property="og:title" content="كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة وثقة">
   <meta property="og:description" content="تصفّح تشكيلة واسعة من المنتجات واطلب مباشرة عبر واتساب بسهولة وسرعة.">
-  <meta property="og:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png">
+  <meta property="og:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=65">
   <meta property="og:image:alt" content="شعار المتجر">
 
   <!-- وسوم منصة X / Twitter -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة وثقة">
   <meta name="twitter:description" content="تصفّح تشكيلة واسعة من المنتجات واطلب مباشرة عبر واتساب بسهولة وسرعة.">
-  <meta name="twitter:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png">
+  <meta name="twitter:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=65">
 
   <!-- مصافحة مسبقة للخوادم الخارجية (عدّل رابط قاعدة البيانات لكل عميل ليطابق config.js) -->
   <link rel="preconnect" href="https://test3-2a6de-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
@@ -43,14 +43,14 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap">
   </noscript>
 
-  <link rel="stylesheet" href="css/style.css?v=62">
-  <link rel="stylesheet" href="css/refresh.css?v=62">
+  <link rel="stylesheet" href="css/style.css?v=65">
+  <link rel="stylesheet" href="css/refresh.css?v=65">
 
   <!-- config.js صغير (2KB) ومن نفس النطاق: نحمّله مبكرًا ليبدأ جلب البيانات بالتوازي مع تحميل CSS/JS -->
-  <script src="js/config.js?v=62"></script>
+  <script src="js/config.js?v=65"></script>
   <script>
   /* بدء جلب بيانات الرئيسية فورًا (قبل تحميل store.js). store.js يلتقط النتائج عبر window.__early.
-     صيغة الروابط يجب أن تطابق productQuery() في store.js حرفيًا. */
+     تم إضافة cache: "no-cache" لمنع المتصفح من قراءة نسخ قديمة مخزنة، وتقليص المهلة إلى دقيقة واحدة. */
   (function () {
     try {
       if (typeof STORE_CONFIG === "undefined" || !window.fetch) return;
@@ -59,13 +59,23 @@
       var E = window.__early = {};
       function go(path, qs) {
         var url = base + "/" + path + ".json" + (qs || "");
-        E[url] = fetch(url).then(function (r) { return r.ok ? r.json() : undefined; }).catch(function () { return undefined; });
+        E[url] = fetch(url, { cache: "no-cache" }).then(function (r) { return r.ok ? r.json() : undefined; }).catch(function () { return undefined; });
       }
       function q(f, v, l) {
         return "?orderBy=" + encodeURIComponent(JSON.stringify(f)) + "&equalTo=" + encodeURIComponent(JSON.stringify(v)) + "&limitToFirst=" + l;
       }
+      var now = Date.now();
       var last = +localStorage.getItem("last_meta_pull_time") || 0;
-      if (Date.now() - last >= 900000) { go("ws_categories"); go("ws_settings"); go("ws_ads"); }
+      if (now - last >= 60000) {
+        localStorage.removeItem("last_meta_pull_time");
+        go("ws_categories");
+        go("ws_settings");
+        go("ws_ads");
+      }
+      var lastIdx = +localStorage.getItem("ws_index_checked") || 0;
+      if (now - lastIdx >= 60000) {
+        localStorage.removeItem("ws_index_checked");
+      }
       go("ws_products", q("featured", true, 5));
       go("ws_products", q("isOffer", true, 5));
       go("ws_products", q("isNew", true, 5));
@@ -100,7 +110,7 @@
       </div>
       <div class="hero-art" id="heroPromoContainer">
         <!-- صورة افتراضية تظهر فوراً قبل تحميل السلايدر -->
-        <div class="hero-art-default"><img src="assets/logo/logo.png" alt="شعار المتجر" width="160" height="160" fetchpriority="high" decoding="async"></div>
+        <div class="hero-art-default"><img src="assets/logo/logo.png?v=65" alt="شعار المتجر" width="160" height="160" fetchpriority="high" decoding="async"></div>
       </div>
     </div>
   </section>
@@ -227,17 +237,17 @@
   
 <div id="site-footer"></div>
 
-<!-- كل السكربتات مؤجلة (defer) → لا تحجب الرسم. لا حاجة لـ Firebase SDK في المتجر (القراءة عبر REST) -->
-<script src="js/icons.js?v=62" defer></script>
-<script src="js/store.js?v=62" defer></script>
-<script src="js/whatsapp.js?v=62" defer></script>
-<script src="js/app.js?v=62" defer></script>
+<!-- كل السكربتات مؤجلة (defer) → لا تحجب الرسم -->
+<script src="js/icons.js?v=65" defer></script>
+<script src="js/store.js?v=65" defer></script>
+<script src="js/whatsapp.js?v=65" defer></script>
+<script src="js/app.js?v=65" defer></script>
 <script>
 /* ==========================================================================
-   منطق الصفحة الرئيسية
+   منطق الصفحة الرئيسية المحدّث
    - عرض فوري من الكاش ثم تحديث بالخلفية (stale-while-revalidate)
-   - الأقسام الثلاثة تُجلب بالتوازي وكل قسم يظهر فور وصول بياناته
-   - لا يُعاد رسم أي جزء إلا إذا تغيّرت بياناته (لا وميض ولا تكرار تحميل صور)
+   - مزامنة تلقائية مع الفهرس الخفيف ws_index ومع حدث store:synced
+   - تحديث كامل للإعلانات والأقسام والمنتجات دون الحاجة لزيارة صفحة أخرى
    ========================================================================== */
   var slideInterval = null;
   var HOME_SECTIONS = [
@@ -246,6 +256,7 @@
     { grid: "newGrid",      field: "isNew",    cache: "new",      empty: "لا توجد منتجات جديدة حاليًا." }
   ];
   var IMG_FALLBACK = "https://placehold.co/600x600/FAF0EE/5B4146?text=صورة+تجريبية";
+  var paintedSigs = {};
 
   function productMediaHtml(product) {
     if (product.image) {
@@ -347,8 +358,24 @@
 
   function listSig(list) {
     return (list || []).map(function (p) {
-      return [p.id, p.name, p.price, p.image, p.available, p.isOffer, p.isNew, p.featured, Store.getTotalStock(p)].join("~");
+      return [
+        p.id, p.name, p.price, p.image, p.categoryId,
+        Store.getCategoryName(p.categoryId),
+        p.available, p.isOffer, p.isNew, p.featured,
+        Store.getTotalStock(p),
+        (p.colors || []).length, (p.sizes || []).length
+      ].join("~");
     }).join("|");
+  }
+
+  function getSectionFromIndex(field) {
+    if (typeof Store.getIndexItems !== "function" || typeof Store.hasIndexLocal !== "function" || !Store.hasIndexLocal()) {
+      return null;
+    }
+    var items = Store.getIndexItems() || [];
+    return items.filter(function (p) {
+      return p && p[field] && Store.isProductAvailable(p);
+    }).slice(0, 4);
   }
 
   function renderSectionError(sec) {
@@ -364,18 +391,49 @@
     });
   }
 
+  function paintSectionIfChanged(sec, list, allowEmpty) {
+    var sig = (list && list.length) ? listSig(list) : "__EMPTY__";
+    if (!allowEmpty && sig === "__EMPTY__") return;
+    if (paintedSigs[sec.grid] === sig) return;
+    paintedSigs[sec.grid] = sig;
+    renderGridInto(sec.grid, list, sec.empty);
+  }
+
   function loadHomeSection(sec) {
     var cached = Store.getFieldCache(sec.cache).slice(0, 4);
-    var painted = false;
-    if (cached.length) { renderGridInto(sec.grid, cached); painted = true; }   // عرض فوري لزائر عاد
+    if (cached.length) {
+      paintSectionIfChanged(sec, cached, false);
+    }
 
     return Store.loadProductsPageByField(sec.field, true, 4, null).then(function (res) {
-      var list = (res.products || []).slice(0, 4);
+      var list = (res && res.products || []).filter(function (p) { return Store.isProductAvailable(p); }).slice(0, 4);
+      // إن كانت نتيجة الاستعلام المباشر فارغة والفهرس المحلي محمّل، نأخذ من الفهرس المحدث
+      if (!list.length) {
+        var idxList = getSectionFromIndex(sec.field);
+        if (idxList && idxList.length) list = idxList;
+      }
       Store.setFieldCache(sec.cache, list);
-      if (!painted || listSig(list) !== listSig(cached)) renderGridInto(sec.grid, list, sec.empty);
+      paintSectionIfChanged(sec, list, true);
     }).catch(function (err) {
       console.error("Home section error (" + sec.field + "):", err);
-      if (!painted) renderSectionError(sec);
+      var idxList = getSectionFromIndex(sec.field);
+      if (idxList) {
+        Store.setFieldCache(sec.cache, idxList);
+        paintSectionIfChanged(sec, idxList, true);
+      } else if (!paintedSigs[sec.grid]) {
+        renderSectionError(sec);
+      }
+    });
+  }
+
+  function syncSectionsFromFreshIndex() {
+    if (typeof Store.hasIndexLocal !== "function" || !Store.hasIndexLocal()) return;
+    HOME_SECTIONS.forEach(function (sec) {
+      var idxList = getSectionFromIndex(sec.field);
+      if (idxList) {
+        Store.setFieldCache(sec.cache, idxList);
+        paintSectionIfChanged(sec, idxList, true);
+      }
     });
   }
 
@@ -386,7 +444,7 @@
     if (!el) return;
     var cats = Store.getCategories().filter(function (c) { return !c.parentId; });
 
-    if (!cats.length && !LS.get("last_meta_pull_time")) return;     // لم تصل أول مزامنة بعد: نُبقي الـ skeleton
+    if (!cats.length && !LS.get("last_meta_pull_time")) return; // لم تصل أول مزامنة بعد: نُبقي الـ skeleton
 
     var sig = JSON.stringify(cats.map(function (c) { return [c.id, c.name, c.image, c.icon]; }));
     if (sig === catSig) return;
@@ -435,7 +493,7 @@
     if (!heroArt) return;
 
     var sig = JSON.stringify(ads.map(function (a) { return [a.image, a.link, a.order]; }));
-    if (sig === adsSig) return;                       // لا تغيير ← لا نعيد بناء السلايدر (يمنع القفز لأول شريحة)
+    if (sig === adsSig) return; // لا تغيير ← لا نعيد بناء السلايدر
     var hadSlider = adsSig !== null && adsSig !== "[]";
     adsSig = sig;
 
@@ -444,7 +502,7 @@
     clearInterval(slideInterval);
 
     if (!ads.length) {
-      if (hadSlider) heroArt.innerHTML = '<div class="hero-art-default"><img src="assets/logo/logo.png" alt="شعار المتجر" width="160" height="160" decoding="async"></div>';
+      if (hadSlider) heroArt.innerHTML = '<div class="hero-art-default"><img src="assets/logo/logo.png?v=65" alt="شعار المتجر" width="160" height="160" decoding="async"></div>';
       return;
     }
 
@@ -491,7 +549,6 @@
     track.addEventListener("touchstart", function (e) { stop(); startX = e.changedTouches[0].screenX; }, { passive: true });
     track.addEventListener("touchend", function (e) {
       var endX = e.changedTouches[0].screenX;
-      // RTL: translateX موجب يحرّك المحتوى لليسار، لذلك نبقي نفس منطق الاتجاهات الأصلي
       if (startX - endX > 50) goToSlide(currentIndex + 1); else if (endX - startX > 50) goToSlide(currentIndex - 1);
       start();
     }, { passive: true });
@@ -503,16 +560,31 @@
     renderHomeSocial();
     renderHomeCategories();
     renderAdsSlider();
-    HOME_SECTIONS.forEach(loadHomeSection);           // الأقسام الثلاثة بالتوازي
+    HOME_SECTIONS.forEach(loadHomeSection);
+
+    // فحص وتحديث الفهرس الخفيف ws_index بالخلفية لضمان أحدث المنتجات دائماً
+    if (typeof Store !== "undefined" && typeof Store.ensureIndexFresh === "function") {
+      Store.ensureIndexFresh().then(function () {
+        syncSectionsFromFreshIndex();
+      }).catch(function () {});
+    }
   }
 
-  window.addEventListener("DOMContentLoaded", initHome);
-
-  document.addEventListener("store:synced", function () {
+  function onStoreSynced() {
     renderHomeSocial();
     renderHomeCategories();
     renderAdsSlider();
-  });
+    // إعادة تحديث بطاقات المنتجات في حال وصول أسماء أقسام جديدة أو تغير الفهرس
+    HOME_SECTIONS.forEach(function (sec) {
+      var cached = Store.getFieldCache(sec.cache).slice(0, 4);
+      if (cached.length) paintSectionIfChanged(sec, cached, false);
+    });
+    syncSectionsFromFreshIndex();
+  }
+
+  window.addEventListener("DOMContentLoaded", initHome);
+  document.addEventListener("store:synced", onStoreSynced);
+  window.addEventListener("store:synced", onStoreSynced);
 
   document.addEventListener("store:sync-error", function () {
     var el = document.getElementById("homeCategories");
