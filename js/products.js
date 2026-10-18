@@ -738,7 +738,7 @@ function renderProductDetail(mount, product) {
   if (hasSizes) {
     sizesHtml =
       '<div class="field" style="margin-bottom:16px;">' +
-        '<label style="display:block;margin-bottom:8px;font-weight:600;">المقاس:</label>' +
+        '<label style="display:block;margin-bottom:8px;font-weight:600;">الحجم:</label>' +
         '<div id="sizeButtons" style="display:flex;flex-wrap:wrap;gap:8px;">' +
           product.sizes.map(function (sz, i) {
             return '<button type="button" class="size-btn' + (i === 0 ? " is-selected" : "") + '" data-size="' + escapeHtml(sz) + '">' + escapeHtml(sz) + '</button>';
