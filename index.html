@@ -66,14 +66,14 @@
       }
       var now = Date.now();
       var last = +localStorage.getItem("last_meta_pull_time") || 0;
-      if (now - last >= 900000) {
+      if (now - last >= 60000) {
         localStorage.removeItem("last_meta_pull_time");
         go("ws_categories");
         go("ws_settings");
         go("ws_ads");
       }
       var lastIdx = +localStorage.getItem("ws_index_checked") || 0;
-      if (now - lastIdx >= 900000) {
+      if (now - lastIdx >= 60000) {
         localStorage.removeItem("ws_index_checked");
       }
       go("ws_products", q("featured", true, 5));
