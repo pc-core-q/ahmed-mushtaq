@@ -51,6 +51,57 @@
     max-width:calc(50% - 6px);
     scroll-snap-align:start;
   }
+
+  /* ضبط مقاس وتناسب بطاقة المنتج لتملأ الصورة البطاقة بالكامل */
+  .product-card .product-media {
+    width: 100%;
+    aspect-ratio: 1 / 1 !important;
+    height: auto !important;
+    max-height: 185px;
+    background: transparent !important;
+    display: block;
+    overflow: hidden;
+  }
+
+  .product-card .product-media > img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover !important;
+    padding: 0 !important;
+    display: block;
+  }
+
+  .product-card .product-body {
+    padding: 8px 10px 10px;
+    gap: 2px;
+  }
+
+  .product-card .product-name {
+    font-size: 0.85rem;
+    line-height: 1.25;
+    margin: 0 0 2px;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .product-card .product-foot {
+    margin-top: auto;
+    gap: 6px;
+    padding-top: 2px;
+  }
+
+  .product-card .price {
+    font-size: 0.95rem;
+    line-height: 1.2;
+  }
+
+  .product-card .product-actions .btn {
+    min-height: 36px;
+    padding: 6px 8px;
+    font-size: 0.8rem;
+  }
 }
 
 /* ---- Product page: sticky action bar on phones and small tablets ---- */

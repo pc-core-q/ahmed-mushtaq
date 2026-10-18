@@ -1402,7 +1402,6 @@ window.updateOrderInFirebase = async function(orderId, patch) {
   LS.set("ws_orders", JSON.stringify(list));
   return true;
 };
-
 function renderOrdersTable() {
   const tbody = document.getElementById("ordersTableBody");
   if (!tbody) return;
@@ -1420,19 +1419,33 @@ function renderOrdersTable() {
 
   const rowsHtml = orders.map(function (o) {
     const date = escapeHtml(new Date(o.date).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" }));
-    const summary = (o.items || []).map(function (it) {
+    
+    // بناء عناصر المنتجات كقائمة أفقية ملمومة ومرتبة
+    const itemsList = (o.items || []).map(function (it) {
       const opts = [];
       if (it.color) opts.push(escapeHtml(it.color));
       if (it.size) opts.push(escapeHtml(it.size));
       if (!opts.length && it.variant) opts.push(escapeHtml(it.variant));
-      return escapeHtml(it.name) + (opts.length ? " (" + opts.join(" / ") + ")" : "") + " ×" + (Number(it.qty) || 0);
-    }).join("، ");
+      const optHtml = opts.length ? ' <small>(' + opts.join(' / ') + ')</small>' : '';
+      const qty = Number(it.qty) || 1;
+
+      return (
+        '<li class="order-item">' +
+          '<span class="order-item-qty">' + qty + '×</span>' +
+          '<span class="order-item-name">' + escapeHtml(it.name || "منتج") + optHtml + '</span>' +
+        '</li>'
+      );
+    }).join("");
+
+    const summary = itemsList 
+      ? '<ul class="order-items">' + itemsList + '</ul>' 
+      : '<span class="order-items-empty">—</span>';
 
     const cust = o.customer || {};
     let customerHtml = '<span style="color:var(--ink-400);font-size:.85rem;">بدون بيانات توصيل</span>';
     if (cust.phone || cust.gov) {
       customerHtml = 
-        '<div style="font-size:.85rem;line-height:1.4;">' +
+        '<div style="font-size:.85rem;line-height:1.4;white-space:nowrap;">' +
           (cust.phone ? '<a href="tel:' + escapeHtml(String(cust.phone).replace(/[^0-9+]/g, "")) + '" style="font-weight:700;color:var(--olive-700);text-decoration:underline;" dir="ltr">' + escapeHtml(cust.phone) + '</a><br>' : '') +
           '<span>' + escapeHtml(cust.gov || "") + (cust.area ? ' — ' + escapeHtml(cust.area) : '') + '</span>' +
           (cust.landmark && cust.landmark !== "لا يوجد" ? '<br><small style="color:var(--ink-500);">' + escapeHtml(cust.landmark) + '</small>' : '') +
@@ -1450,16 +1463,16 @@ function renderOrdersTable() {
     `;
     
     if (deducted) {
-        statusHtml += `<div style="font-size:0.75rem; color:var(--success); margin-top:6px; font-weight:bold;">(تم خصم المخزون)</div>`;
+        statusHtml += `<div style="font-size:0.75rem; color:var(--success); margin-top:6px; font-weight:bold; white-space:nowrap;">(تم خصم المخزون)</div>`;
     }
 
     return (
       "<tr>" +
         "<td>" + date + "</td>" +
         "<td>" + customerHtml + "</td>" +
-        "<td>" + (o.type === "cart" ? "سلة كاملة" : "منتج واحد") + "</td>" +
+        '<td style="white-space:nowrap;">' + (o.type === "cart" ? "سلة كاملة" : "منتج واحد") + "</td>" +
         "<td>" + summary + "</td>" +
-        "<td>" + formatPrice(o.total) + "</td>" +
+        '<td style="white-space:nowrap;font-weight:700;">' + formatPrice(o.total) + "</td>" +
         "<td>" + statusHtml + "</td>" + 
       "</tr>"
     );
@@ -1467,7 +1480,6 @@ function renderOrdersTable() {
 
   targets.forEach(function (t) { t.innerHTML = rowsHtml; });
 }
-
 /* ---------------------------------------------------------------------- */
 /* إعدادات المتجر                                                       */
 /* ---------------------------------------------------------------------- */
