@@ -4,53 +4,43 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <!-- العناوين الأساسية لمحركات البحث والمتصفحات -->
   <title>كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة</title>
   <meta name="description" content="تصفّح تشكيلة واسعة من المنتجات المختارة بعناية واطلب مباشرة عبر واتساب مع توصيل سريع لباب بيتك.">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=67">
-  <link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=67">
-  <link rel="apple-touch-icon" href="assets/logo/logo.png?v=67">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=67">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=68">
+  <link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=68">
+  <link rel="apple-touch-icon" href="assets/logo/logo.png?v=68">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=68">
 
-  <!-- ========================================== -->
-  <!-- تهيئة الروابط للمشاركة (WhatsApp / Telegram / Social) -->
-  <!-- ========================================== -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ahmed-mushtaq.pages.dev/">
   <meta property="og:locale" content="ar_AR">
   <meta property="og:site_name" content="كوزمتك احمد مشتاق">
   <meta property="og:title" content="كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة وثقة">
   <meta property="og:description" content="تصفّح تشكيلة واسعة من المنتجات واطلب مباشرة عبر واتساب بسهولة وسرعة.">
-  <meta property="og:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=67">
+  <meta property="og:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=68">
   <meta property="og:image:alt" content="شعار المتجر">
 
-  <!-- وسوم منصة X / Twitter -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة وثقة">
   <meta name="twitter:description" content="تصفّح تشكيلة واسعة من المنتجات واطلب مباشرة عبر واتساب بسهولة وسرعة.">
-  <meta name="twitter:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=67">
+  <meta name="twitter:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=68">
 
-  <!-- مصافحة مسبقة للخوادم الخارجية (عدّل رابط قاعدة البيانات لكل عميل ليطابق config.js) -->
   <link rel="preconnect" href="https://test3-2a6de-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
   <link rel="preconnect" href="https://ik.imagekit.io" crossorigin>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-  <!-- الخطوط لا تحجب الرسم: تُحمَّل بالخلفية ثم تُفعَّل -->
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
   <noscript>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap">
   </noscript>
 
-  <link rel="stylesheet" href="css/style.css?v=67">
-  <link rel="stylesheet" href="css/refresh.css?v=67">
+  <link rel="stylesheet" href="css/style.css?v=68">
+  <link rel="stylesheet" href="css/refresh.css?v=68">
 
-  <!-- config.js صغير (2KB) ومن نفس النطاق: نحمّله مبكرًا ليبدأ جلب البيانات بالتوازي مع تحميل CSS/JS -->
-  <script src="js/config.js?v=67"></script>
+  <script src="js/config.js?v=68"></script>
   <script>
-  /* بدء جلب بيانات الرئيسية فورًا (قبل تحميل store.js). store.js يلتقط النتائج عبر window.__early.
-     تم إضافة cache: "no-cache" لمنع المتصفح من قراءة نسخ قديمة مخزنة، وتقليص المهلة إلى دقيقة واحدة. */
   (function () {
     try {
       if (typeof STORE_CONFIG === "undefined" || !window.fetch) return;
@@ -59,23 +49,17 @@
       var E = window.__early = {};
       function go(path, qs) {
         var url = base + "/" + path + ".json" + (qs || "");
-        E[url] = fetch(url, { cache: "no-cache" }).then(function (r) { return r.ok ? r.json() : undefined; }).catch(function () { return undefined; });
+        E[url] = fetch(url, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : undefined; }).catch(function () { return undefined; });
       }
       function q(f, v, l) {
         return "?orderBy=" + encodeURIComponent(JSON.stringify(f)) + "&equalTo=" + encodeURIComponent(JSON.stringify(v)) + "&limitToFirst=" + l;
       }
-      var now = Date.now();
-      var last = +localStorage.getItem("last_meta_pull_time") || 0;
-      if (now - last >= 300000) {
-        localStorage.removeItem("last_meta_pull_time");
-        go("ws_categories");
-        go("ws_settings");
-        go("ws_ads");
-      }
-      var lastIdx = +localStorage.getItem("ws_index_checked") || 0;
-      if (now - lastIdx >= 300000) {
-        localStorage.removeItem("ws_index_checked");
-      }
+      
+      // سحب فوري سريع للأقسام والإعلانات والنسخة المحدثة
+      go("ws_categories");
+      go("ws_settings");
+      go("ws_ads");
+      go("ws_index/v");
       go("ws_products", q("featured", true, 5));
       go("ws_products", q("isOffer", true, 5));
       go("ws_products", q("isNew", true, 5));
@@ -83,12 +67,10 @@
   })();
   </script>
 
-  <!-- تحميل مسبق للصفحات التالية عند اقتراب المستخدم منها -->
   <script type="speculationrules">{"prefetch":[{"where":{"href_matches":"/*"},"eagerness":"moderate"}]}</script>
 </head>
 <body>
 
-<!-- الهيدر يتم توليده عبر app.js -->
 <div id="site-header" data-active="home"></div>
 
 <main>
@@ -109,13 +91,11 @@
         </div>
       </div>
       <div class="hero-art" id="heroPromoContainer">
-        <!-- صورة افتراضية تظهر فوراً قبل تحميل السلايدر -->
-        <div class="hero-art-default"><img src="assets/logo/logo.png?v=67" alt="شعار المتجر" width="160" height="160" fetchpriority="high" decoding="async"></div>
+        <div class="hero-art-default"><img src="assets/logo/logo.png?v=68" alt="شعار المتجر" width="160" height="160" fetchpriority="high" decoding="async"></div>
       </div>
     </div>
   </section>
 
-  <!-- قسم الأقسام الرئيسية -->
   <section class="section section-categories-highlight" id="categories">
     <div class="container">
       <div class="section-head">
@@ -130,7 +110,6 @@
     </div>
   </section>
 
-  <!-- قسم المنتجات المميزة -->
   <section class="section section-alt">
     <div class="container">
       <div class="section-head">
@@ -149,7 +128,6 @@
     </div>
   </section>
 
-  <!-- قسم العروض الخاصة -->
   <section class="section">
     <div class="container">
       <div class="section-head">
@@ -168,7 +146,6 @@
     </div>
   </section>
 
-  <!-- قسم وصل حديثاً -->
   <section class="section section-alt">
     <div class="container">
       <div class="section-head">
@@ -187,7 +164,6 @@
     </div>
   </section>
 
-  <!-- قسم المزايا -->
   <section class="section">
     <div class="container">
       <div class="section-head">
@@ -221,7 +197,6 @@
     </div>
   </section>
 
-  <!-- تواصل معنا -->
   <section class="section section-alt">
     <div class="container">
       <div class="contact-band" id="contactBand">
@@ -237,18 +212,11 @@
   
 <div id="site-footer"></div>
 
-<!-- كل السكربتات مؤجلة (defer) → لا تحجب الرسم -->
-<script src="js/icons.js?v=67" defer></script>
-<script src="js/store.js?v=67" defer></script>
-<script src="js/whatsapp.js?v=67" defer></script>
-<script src="js/app.js?v=67" defer></script>
+<script src="js/icons.js?v=68" defer></script>
+<script src="js/store.js?v=68" defer></script>
+<script src="js/whatsapp.js?v=68" defer></script>
+<script src="js/app.js?v=68" defer></script>
 <script>
-/* ==========================================================================
-   منطق الصفحة الرئيسية المحدّث
-   - عرض فوري من الكاش ثم تحديث بالخلفية (stale-while-revalidate)
-   - مزامنة تلقائية مع الفهرس الخفيف ws_index ومع حدث store:synced
-   - تحديث كامل للإعلانات والأقسام والمنتجات دون الحاجة لزيارة صفحة أخرى
-   ========================================================================== */
   var slideInterval = null;
   var HOME_SECTIONS = [
     { grid: "featuredGrid", field: "featured", cache: "featured", empty: "لا توجد منتجات مميزة حاليًا." },
@@ -407,7 +375,6 @@
 
     return Store.loadProductsPageByField(sec.field, true, 4, null).then(function (res) {
       var list = (res && res.products || []).filter(function (p) { return Store.isProductAvailable(p); }).slice(0, 4);
-      // إن كانت نتيجة الاستعلام المباشر فارغة والفهرس المحلي محمّل، نأخذ من الفهرس المحدث
       if (!list.length) {
         var idxList = getSectionFromIndex(sec.field);
         if (idxList && idxList.length) list = idxList;
@@ -437,14 +404,11 @@
     });
   }
 
-  /* ---------- الأقسام ---------- */
   var catSig = null;
   function renderHomeCategories() {
     var el = document.getElementById("homeCategories");
     if (!el) return;
     var cats = Store.getCategories().filter(function (c) { return !c.parentId; });
-
-    if (!cats.length && !LS.get("last_meta_pull_time")) return; // لم تصل أول مزامنة بعد: نُبقي الـ skeleton
 
     var sig = JSON.stringify(cats.map(function (c) { return [c.id, c.name, c.image, c.icon]; }));
     if (sig === catSig) return;
@@ -463,7 +427,6 @@
     }).join("");
   }
 
-  /* ---------- روابط التواصل ---------- */
   function renderHomeSocial() {
     var homeSocial = document.getElementById("homeSocialRow");
     if (!homeSocial) return;
@@ -475,7 +438,6 @@
     homeSocial.innerHTML = html || '<span style="opacity:.6;">لم يتم إعداد روابط التواصل بعد.</span>';
   }
 
-  /* ---------- سلايدر الإعلانات ---------- */
   var adsSig = null;
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var sliderCtl = { start: function () {}, stop: function () {} };
@@ -493,7 +455,7 @@
     if (!heroArt) return;
 
     var sig = JSON.stringify(ads.map(function (a) { return [a.image, a.link, a.order]; }));
-    if (sig === adsSig) return; // لا تغيير ← لا نعيد بناء السلايدر
+    if (sig === adsSig) return;
     var hadSlider = adsSig !== null && adsSig !== "[]";
     adsSig = sig;
 
@@ -502,7 +464,7 @@
     clearInterval(slideInterval);
 
     if (!ads.length) {
-      if (hadSlider) heroArt.innerHTML = '<div class="hero-art-default"><img src="assets/logo/logo.png?v=67" alt="شعار المتجر" width="160" height="160" decoding="async"></div>';
+      if (hadSlider) heroArt.innerHTML = '<div class="hero-art-default"><img src="assets/logo/logo.png?v=68" alt="شعار المتجر" width="160" height="160" decoding="async"></div>';
       return;
     }
 
@@ -562,9 +524,8 @@
     renderAdsSlider();
     HOME_SECTIONS.forEach(loadHomeSection);
 
-    // فحص وتحديث الفهرس الخفيف ws_index بالخلفية لضمان أحدث المنتجات دائماً
     if (typeof Store !== "undefined" && typeof Store.ensureIndexFresh === "function") {
-      Store.ensureIndexFresh().then(function () {
+      Store.ensureIndexFresh(true).then(function () {
         syncSectionsFromFreshIndex();
       }).catch(function () {});
     }
@@ -574,7 +535,6 @@
     renderHomeSocial();
     renderHomeCategories();
     renderAdsSlider();
-    // إعادة تحديث بطاقات المنتجات في حال وصول أسماء أقسام جديدة أو تغير الفهرس
     HOME_SECTIONS.forEach(function (sec) {
       var cached = Store.getFieldCache(sec.cache).slice(0, 4);
       if (cached.length) paintSectionIfChanged(sec, cached, false);
