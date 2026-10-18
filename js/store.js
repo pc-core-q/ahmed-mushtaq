@@ -3,11 +3,11 @@
    مع دعم الفهرس المصغر (Mini-Index) للمتاجر حتى 2000 منتج + المزامنة السحابية.
    ========================================================================== */
 
-const META_CACHE_MS = 5 * 60 * 1000;   // مدة الكاش: 30 دقيقة (الفهرس يُفحص برقم نسخة صغير جداً، ولا يُنزَّل إلا إذا تغيّر)
-const QUERY_CACHE_MS = 2 * 60 * 1000;
-const REFRESH_MS = 5 * 60 * 1000;     // مهلة التحديث الوحيدة: كل 15 دقيقة يفحص الموقع تلقائياً (للمنتجات والأقسام والإعلانات)
-const INDEX_CHECK_MS = REFRESH_MS;
-const META_PULL_MS = REFRESH_MS;
+const META_CACHE_MS = 60 * 1000;       // فحص خفيف دوري
+const QUERY_CACHE_MS = 15 * 1000;
+const REFRESH_MS = 30 * 1000;
+const INDEX_CHECK_MS = 15 * 1000;      // فحص إصدار الفهرس فوراً
+const META_PULL_MS = 15 * 1000;       // فحص الأقسام والإعلانات فوراً
 const PRODUCT_CACHE_LIMIT = 5000;
 const FETCH_TIMEOUT_MS = 15000;
 
@@ -22,11 +22,11 @@ const DB_KEYS = {
   seeded: "ws_seeded_v1",
   ads: "ws_ads",
   productsCount: "ws_products_count_meta",
-  index: "ws_index"          // عقدة Firebase: { v: رقم النسخة, items: [سجلات خفيفة لكل المنتجات] }
+  index: "ws_index"
 };
-const IDX_ITEMS = "ws_index_items";      // نسخة الفهرس المحلية (JSON)
-const IDX_V = "ws_index_v";              // رقم نسخة الفهرس المحلي
-const IDX_CHECKED = "ws_index_checked";  // آخر وقت فُحص فيه رقم النسخة من الخادم
+const IDX_ITEMS = "ws_index_items";
+const IDX_V = "ws_index_v";
+const IDX_CHECKED = "ws_index_checked";
 
 const LS = (function () {
   let ok = true;
@@ -255,9 +255,6 @@ async function matchAll(field, value) {
   return entries;
 }
 
-/* يكتب عقدة كاملة إلى Firebase ويعيد Promise<boolean>:
-   true = نجحت الكتابة (أو الوضع المحلي بلا Firebase) · false = فشلت (الخطأ يُسجَّل في Console).
-   لا يرفع استثناء أبداً، فالمستدعون الذين يتجاهلون النتيجة لا يتأثرون. */
 function syncNodeToFirebase(nodeKey, data) {
   if (!firebaseEnabled) return Promise.resolve(true);
   if (!database) { console.warn("Firebase SDK غير محمّل — لا يمكن الكتابة إلى " + nodeKey); return Promise.resolve(false); }
@@ -375,7 +372,7 @@ async function _pullFromFirebase(force) {
     LS.set("last_meta_pull_time", String(now));
 
     const snapshotAfter = [DB_KEYS.categories, DB_KEYS.settings, DB_KEYS.ads].map(function (k) { return LS.get(k); }).join("\u0001");
-    if (snapshotAfter !== snapshotBefore || !lastSync) emitStoreEvent("store:synced");
+    if (snapshotAfter !== snapshotBefore || !lastSync || force) emitStoreEvent("store:synced");
   } catch (e) {
     console.error("Firebase metadata pull error:", e);
     emitStoreEvent("store:sync-error");
@@ -446,7 +443,7 @@ function seedIfNeeded() {
 }
 
 seedIfNeeded();
-pullFromFirebase();
+pullFromFirebase(true);
 
 function inventoryKey(color, size) {
   return (color || "_") + "||" + (size || "_");
@@ -458,7 +455,7 @@ function sumInventory(inventory) {
 }
 
 let _productsMem = null;
-let _productsFullyLoaded = false;          // true بعد أول تحميل كامل ناجح للمنتجات من Firebase في هذه الصفحة
+let _productsFullyLoaded = false;
 let _lastProductsWrite = Promise.resolve(true);
 const _inflight = {};
 function dedupe(key, fn) {
@@ -468,15 +465,12 @@ function dedupe(key, fn) {
   return p;
 }
 
-// إجمالي المخزون الحقيقي للمنتج: من شبكة inventory إن وُجدت ألوان/مقاسات، وإلا من stock
 function totalStockOf(p) {
   if (!p) return 0;
   const hasMatrix = (Array.isArray(p.colors) && p.colors.length > 0) || (Array.isArray(p.sizes) && p.sizes.length > 0);
   return hasMatrix && p.inventory ? sumInventory(p.inventory) : (Number(p.stock) || 0);
 }
 
-/* isFullSnapshot=true فقط عندما تكون القائمة هي كل منتجات المتجر (تحميل كامل / حفظ من الأدمن).
-   الدمج الجزئي (_cacheLoadedProducts) لا يلمس العدّاد وإلا اعتُبر عدد المنتجات المحمّلة هو إجمالي المتجر. */
 function writeProductsLocal(list, isFullSnapshot) {
   if (Array.isArray(list)) {
     if (isFullSnapshot) {
@@ -488,10 +482,6 @@ function writeProductsLocal(list, isFullSnapshot) {
   else _productsMem = list;
 }
 
-/* ===================== فهرس المنتجات الخفيف (ws_index) =====================
-   سجل صغير لكل منتج (الاسم/السعر/القسم/الصورة/التوفر/الأعلام) يكفي لعرض البطاقات والبحث والفرز
-   في المتصفح على كل المنتجات دون تنزيل تفاصيلها. الأدمن يكتبه مع كل حفظ للمنتجات (عملية واحدة ذرّية)،
-   والزائر يفحص رقم النسخة (بضعة بايتات) كل 30 دقيقة ولا يُنزّل الفهرس إلا إن تغيّر. */
 const AR_DIGITS = "\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669";
 function normalizeSearch(str) {
   return String(str === null || str === undefined ? "" : str).toLowerCase()
@@ -543,11 +533,11 @@ function hydrateIndexRecord(r) {
   };
 }
 
-let _indexMem = null;   // سجلات الفهرس بعد التهيئة (نفس المصفوفة تُعاد في كل استدعاء)
+let _indexMem = null;
 function storeIndexLocal(payload) {
   const raw = JSON.stringify(payload.items);
   let ok = LS.set(IDX_ITEMS, raw);
-  if (!ok) { LS.remove(DB_KEYS.products); ok = LS.set(IDX_ITEMS, raw); }   // الكاش القديم الكبير قد يمنع التخزين
+  if (!ok) { LS.remove(DB_KEYS.products); ok = LS.set(IDX_ITEMS, raw); }
   if (ok) { LS.set(IDX_V, String(payload.v)); LS.set(IDX_CHECKED, String(Date.now())); }
   _indexMem = payload.items.map(hydrateIndexRecord).filter(Boolean);
 }
@@ -559,15 +549,11 @@ function syncProductsAndIndex(list, payload) {
   upd[DB_KEYS.products] = list;
   upd[DB_KEYS.index] = payload;
   return database.ref().update(upd).then(function () { return true; }).catch(function (error) {
-    console.error("Firebase products+index sync error (غالباً Rules ws_index ناقصة):", error);
-    // لا نمنع حفظ المنتجات إن تعذّر الفهرس فقط (يظهر تنبيه في لوحة الأدمن لإضافة القاعدة)
+    console.error("Firebase products+index sync error:", error);
     return syncNodeToFirebase(DB_KEYS.products, list);
   });
 }
 
-
-/* عند تغيّر الفهرس على الخادم (إضافة/حذف/تعديل): نُسقط كل كاش قديم قد يحتوي منتجات محذوفة.
-   الفهرس هو المرجع الوحيد لما هو موجود فعلاً في المتجر. (لا يُطبَّق في جلسة الأدمن) */
 function pruneStaleCaches(indexItems) {
   try {
     if (sessionStorage.getItem(DB_KEYS.session) === "1") return;
@@ -599,7 +585,6 @@ const Store = {
     return 0;
   },
 
-  // هل يحتاج عدّاد المنتجات (إجمالي المتجر) لتحديث؟ (كل 15 دقيقة كحد أقصى)
   isProductsCountStale() {
     const t = Number(LS.get("ws_products_count_time") || 0);
     return !t || (Date.now() - t) >= META_CACHE_MS || !Number(LS.get(DB_KEYS.productsCount));
@@ -615,7 +600,7 @@ const Store = {
         LS.set("ws_products_count_time", String(Date.now()));
         return count;
       }
-      if (shallowKeys === null) {            // العقدة فارغة فعلاً
+      if (shallowKeys === null) {
         LS.set(DB_KEYS.productsCount, "0");
         LS.set("ws_products_count_time", String(Date.now()));
         return 0;
@@ -624,7 +609,6 @@ const Store = {
     return this.getProductsCount();
   },
 
-  // الفهرس الخفيف لكل المنتجات (للمتجر والبحث). نفس المصفوفة تُعاد في كل مرة.
   getIndexItems() {
     if (_indexMem) return _indexMem;
     const raw = LS.get(IDX_ITEMS);
@@ -639,41 +623,39 @@ const Store = {
     if (prods && prods.length) return prods.map(buildIndexRecord).filter(Boolean).map(hydrateIndexRecord).filter(Boolean);
     return [];
   },
-  getMiniIndex() { return this.getIndexItems(); },   // اسم قديم
+  getMiniIndex() { return this.getIndexItems(); },
 
   hasIndexLocal() { return !!(_indexMem || LS.get(IDX_ITEMS)); },
 
-  /* يضمن أن الفهرس المحلي حديث. الكلفة: فحص رقم النسخة (بايتات) كل 30 دقيقة؛ والفهرس نفسه يُنزَّل فقط عند تغيّره. */
   async ensureIndexFresh(force) {
     if (!firebaseEnabled) return;
-    const have = this.hasIndexLocal();
-    const checked = Number(LS.get(IDX_CHECKED) || 0);
-    if (!force && have && (Date.now() - checked) < INDEX_CHECK_MS) return;
     return dedupe("indexFresh", async () => {
       let remoteV;
-      try { remoteV = await restGet(DB_KEYS.index + "/v", "", 8000); }
-      catch (e) { if (have) return; throw e; }
+      try {
+        remoteV = await restGet(DB_KEYS.index + "/v", "", 8000);
+      } catch (e) {
+        if (this.hasIndexLocal()) return;
+        throw e;
+      }
+
       if (remoteV === null || remoteV === undefined) {
-        // الفهرس لم يُبنَ بعد على الخادم (يبنيه الأدمن تلقائياً عند أول فتح للوحة التحكم): نعمل بالطريقة القديمة مؤقتاً
-        console.warn("ws_index غير موجود على Firebase: افتح لوحة الأدمن مرة واحدة لبنائه. (يعمل الموقع مؤقتاً بتحميل كل المنتجات)");
         await this.ensureAllProductsFresh();
         _indexMem = this.getProducts().map(buildIndexRecord).filter(Boolean).map(hydrateIndexRecord).filter(Boolean);
-        LS.set(IDX_CHECKED, String(Date.now()));
         return;
       }
-      if (have && String(LS.get(IDX_V)) === String(remoteV)) { LS.set(IDX_CHECKED, String(Date.now())); return; }
+
+      if (!force && this.hasIndexLocal() && String(LS.get(IDX_V)) === String(remoteV)) {
+        return;
+      }
+
       const items = await restGet(DB_KEYS.index + "/items", "", 30000);
       const freshItems = firebaseValueToArray(items);
       storeIndexLocal({ v: remoteV, items: freshItems });
-      pruneStaleCaches(freshItems);              // يحذف أي منتج محذوف من كاش الزائر
-      if (have) emitStoreEvent("store:synced");  // الصفحة المفتوحة تعيد رسم المنتجات تلقائياً
-      // تنظيف كاش المنتجات الكامل القديم إن كان كبيراً (كان يُملأ بالتحميل الكامل سابقاً)
-      const old = LS.get(DB_KEYS.products);
-      if (old && old.length > 1000000) LS.remove(DB_KEYS.products);
+      pruneStaleCaches(freshItems);
+      emitStoreEvent("store:synced");
     });
   },
 
-  /* الأدمن: يبني ws_index من القائمة الكاملة (بعد التحميل الكامل). force=true لإعادة البناء ولو كان موجوداً. */
   async rebuildIndex(force) {
     if (!firebaseEnabled || !database || !this.canWriteProducts()) return false;
     if (!force) {
@@ -696,6 +678,8 @@ const Store = {
   saveCategories(list) {
     LS.set(DB_KEYS.categories, JSON.stringify(list));
     syncNodeToFirebase(DB_KEYS.categories, list);
+    // تحديث رقم الفهرس لإشعار الزوار بتغير الأقسام فوراً
+    if (database) database.ref(DB_KEYS.index + "/v").set(Date.now());
   },
   addCategory(cat) {
     const list = this.getCategories();
@@ -733,12 +717,8 @@ const Store = {
     });
   },
 
-  /* هل يُسمح بكتابة قائمة المنتجات إلى Firebase الآن؟
-     الكتابة تستبدل عقدة ws_products كاملة، لذلك لا نسمح بها إلا بعد تحميل كل المنتجات من الخادم
-     في هذه الجلسة (loadAllProductsFromFirebase)؛ وإلا قد يُمحى الكتالوج بكاش جزئي. */
   canWriteProducts() { return !firebaseEnabled || _productsFullyLoaded; },
 
-  // Promise<boolean> لآخر عملية حفظ للمنتجات (لتأكيد نجاح الكتابة قبل إظهار رسالة نجاح)
   whenProductsSaved() { return _lastProductsWrite; },
 
   saveProducts(list) {
@@ -747,7 +727,7 @@ const Store = {
       _lastProductsWrite = Promise.resolve(false);
       return _lastProductsWrite;
     }
-    const normalized = (list || []).map((p, idx) => {
+    const normalized = (list || []).map((p) => {
       if (!p) return p;
       const realId = String(p.id || p.objectID || uid("prd"));
       return Object.assign({}, p, { id: realId, objectID: realId });
@@ -785,7 +765,6 @@ const Store = {
     return this.saveProducts(this.getProducts().filter(p => p && String(p.id || p.objectID).trim() !== targetId)); 
   },
 
-  // إزالة منتج من الكاش المحلي فقط (لا تكتب إلى Firebase أبداً) — تُستعمل عند اكتشاف أن المنتج حُذف من الخادم
   _removeFromLocalCache(id) {
     const targetId = String(id).trim();
     writeProductsLocal(this.getProducts().filter(p => p && String(p.id || p.objectID).trim() !== targetId));
@@ -806,7 +785,7 @@ const Store = {
     const cachedAt = Number(LS.get(cacheTimeKey) || 0);
 
     if (!forceRefresh && cached.length > 0) {
-      if (now - cachedAt < META_CACHE_MS || !firebaseEnabled) return cached;
+      if (now - cachedAt < 30000 || !firebaseEnabled) return cached;
     }
     if (!firebaseEnabled) return this.getProducts().filter(function (p) { return p[field] === value; });
 
@@ -902,7 +881,7 @@ const Store = {
     const cachedAt = Number(LS.get(cacheTimeKey) || 0);
 
     if (!forceRefresh && cached.length > 0) {
-      if (now - cachedAt < META_CACHE_MS || !firebaseEnabled) return cached;
+      if (now - cachedAt < 30000 || !firebaseEnabled) return cached;
     }
     if (!firebaseEnabled) return this.getProducts().filter(function (p) { return p.categoryId === categoryId; });
 
@@ -936,16 +915,10 @@ const Store = {
 
   async loadAllProductsFromFirebase(forceRefresh) {
     if (!firebaseEnabled) return this.getProducts();
-    const cachedAt = Number(LS.get("ws_products_all_time") || 0);
-    const cached = this.getProducts();
-
-    if (!forceRefresh && cached.length && (Date.now() - cachedAt < META_CACHE_MS)) return cached;
-
     let products;
     try { products = await fetchAllProductsFromFirebase(); }
     catch (error) { console.error("Firebase all-products fetch error:", error); return this.getProducts(); }
     if (products === null) return this.getProducts();
-    // نخزّن نسخة محلية فقط. (كان الكود يعيد كتابة القائمة كلها إلى Firebase بعد كل قراءة — هدر وخطر تعارض)
     const normalized = products.map(function (p) {
       const realId = String(p.id || p.objectID || "");
       return Object.assign({}, p, { id: realId, objectID: realId });
@@ -956,11 +929,8 @@ const Store = {
     return normalized;
   },
 
-  // يحدّث نسخة كل المنتجات إن مرّت 15 دقيقة (أو لم تُحمَّل أبداً) دون تحليل JSON الكبير في كل مرة
   async ensureAllProductsFresh() {
     if (!firebaseEnabled) return;
-    const cachedAt = Number(LS.get("ws_products_all_time") || 0);
-    if (cachedAt && (Date.now() - cachedAt) < META_CACHE_MS) return;
     await dedupe("allProducts", () => this.loadAllProductsFromFirebase(true));
   },
 
@@ -1008,8 +978,6 @@ const Store = {
     const key = inventoryKey(color, size);
     return Number((product.inventory || {})[key]) || 0;
   },
-  /* متوفر = غير مخفي يدوياً + مخزون حقيقي > 0.
-     منتجات الألوان/المقاسات تعتمد على inventory (أو على stock المحسوب في الفهرس المصغر الذي لا يحمل inventory). */
   isProductAvailable(product) {
     if (!product || product.available === false) return false;
     if (this.hasVariantMatrix(product) && product.inventory) return sumInventory(product.inventory) > 0;
@@ -1163,8 +1131,6 @@ function flushPendingOrders() {
 }
 window.addEventListener("load", function () { setTimeout(flushPendingOrders, 3000); });
 
-/* إعادة فحص التحديثات تلقائياً: عند رجوع الزائر للتبويب، أو استعادة الصفحة من ذاكرة المتصفح (bfcache)،
-   أو عودة الإنترنت، وكل دقيقة تفحص هل انقضت مهلة الـ15 دقيقة (محلياً بلا شبكة) والصفحة ظاهرة. الفحص خفيف (رقم نسخة فقط) ولا يُنزَّل شيء إن لم يتغيّر شيء. */
 (function () {
   let busy = false;
   function recheck() {
@@ -1178,5 +1144,5 @@ window.addEventListener("load", function () { setTimeout(flushPendingOrders, 300
   document.addEventListener("visibilitychange", function () { if (!document.hidden) recheck(); });
   window.addEventListener("pageshow", function (e) { if (e.persisted) recheck(); });
   window.addEventListener("online", recheck);
-  setInterval(function () { if (!document.hidden) recheck(); }, 60 * 1000);   // فحص محلي فقط؛ لا طلب شبكة إلا إذا انقضت مهلة الـ15 دقيقة
+  setInterval(function () { if (!document.hidden) recheck(); }, 15 * 1000);
 })();
