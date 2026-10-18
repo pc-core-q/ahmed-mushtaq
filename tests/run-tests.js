@@ -21,7 +21,7 @@ function makeStorage() {
 function loadEnv(config, extraFiles) {
   const listeners = {};
   const ctx = {
-    console, setTimeout, clearTimeout, Promise, JSON, Math, Date, Object, Array, Map, Set, Number, String, RegExp, Error,
+    console, setTimeout, clearTimeout, setInterval: function () { return 0; }, Promise, JSON, Math, Date, Object, Array, Map, Set, Number, String, RegExp, Error,
     localStorage: makeStorage(), sessionStorage: makeStorage(),
     location: { search: "", href: "http://localhost/", pathname: "/" },
     navigator: { userAgent: "node" },
@@ -249,6 +249,29 @@ async function atest(name, fn) {
     const e = fbEnv(st), S = vm.runInContext("Store", e);
     await S.ensureIndexFresh();
     assert.ok(S.getIndexItems().length === 50);
+  });
+
+  await atest("منتج محذوف: الزائر العائد يفقده تلقائياً (فهرس + كاش المنتجات + كاش الأقسام) ويُرسَل store:synced", async () => {
+    const A = BIG[0], B = BIG[1];
+    const st = { requests: [], bytes: 0, v: 1000, items: [A, B].map(p => buildRec(p)) };
+    function buildRec(p) { return { id: p.id, name: p.name, price: p.price, categoryId: p.categoryId || "", available: true, stock: 5 }; }
+    const e = fbEnv(st), S = vm.runInContext("Store", e);
+    let synced = 0;
+    e.document.addEventListener("store:synced", () => { synced++; });
+    await S.ensureIndexFresh();                       // الزائر يرى المنتجين
+    e.localStorage.setItem("ws_products", JSON.stringify([A, B]));
+    e.localStorage.setItem("ws_products_category_x", JSON.stringify([A, B]));
+    e.localStorage.setItem("ws_products_filter_featured", JSON.stringify([A, B]));
+    assert.strictEqual(S.getIndexItems().length, 2);
+    // الأدمن يحذف B → رقم النسخة يتغيّر
+    st.v = 2000; st.items = [buildRec(A)];
+    e.localStorage.setItem("ws_index_checked", String(Date.now() - 61 * 1000));   // مرّت دقيقة
+    await S.ensureIndexFresh();
+    assert.strictEqual(S.getIndexItems().length, 1, "الفهرس لم يُحدَّث");
+    assert.ok(!S.getProducts().some(p => p.id === B.id), "B ما زال في كاش المنتجات");
+    assert.strictEqual(e.localStorage.getItem("ws_products_category_x"), null);
+    assert.strictEqual(e.localStorage.getItem("ws_products_filter_featured"), null);
+    assert.ok(synced >= 1, "لم يُرسَل store:synced");
   });
 
   console.log("\nالنتيجة: " + passed + " نجح، " + failed + " فشل");

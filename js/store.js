@@ -5,6 +5,8 @@
 
 const META_CACHE_MS = 30 * 60 * 1000;   // مدة الكاش: 30 دقيقة (الفهرس يُفحص برقم نسخة صغير جداً، ولا يُنزَّل إلا إذا تغيّر)
 const QUERY_CACHE_MS = 2 * 60 * 1000;
+const INDEX_CHECK_MS = 60 * 1000;      // فحص رقم نسخة الفهرس (بايتات قليلة) كل دقيقة كحد أقصى → الحذف/الإضافة تصل للزبون خلال دقيقة
+const META_PULL_MS = 5 * 60 * 1000;    // الأقسام/الإعلانات/الإعدادات كل 5 دقائق
 const PRODUCT_CACHE_LIMIT = 5000;
 const FETCH_TIMEOUT_MS = 15000;
 
@@ -164,7 +166,7 @@ async function restGet(path, qs, timeoutMs) {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
     const timer = ctrl ? setTimeout(function () { ctrl.abort(); }, timeoutMs || FETCH_TIMEOUT_MS) : null;
     try {
-      const res = await fetch(url, ctrl ? { signal: ctrl.signal } : undefined);
+      const res = await fetch(url, ctrl ? { signal: ctrl.signal, cache: "no-store" } : { cache: "no-store" });
       if (!res.ok) {
         const err = new Error("Firebase HTTP " + res.status);
         err.status = res.status;
@@ -342,7 +344,7 @@ async function _pullFromFirebase(force) {
   if (!firebaseEnabled) return;
   const lastSync = Number(LS.get("last_meta_pull_time") || 0);
   const now = Date.now();
-  if (!force && lastSync && (now - lastSync) < META_CACHE_MS) return;
+  if (!force && lastSync && (now - lastSync) < META_PULL_MS) return;
 
   const snapshotBefore = [DB_KEYS.categories, DB_KEYS.settings, DB_KEYS.ads].map(function (k) { return LS.get(k); }).join("\u0001");
 
@@ -563,6 +565,24 @@ function syncProductsAndIndex(list, payload) {
 }
 
 
+/* عند تغيّر الفهرس على الخادم (إضافة/حذف/تعديل): نُسقط كل كاش قديم قد يحتوي منتجات محذوفة.
+   الفهرس هو المرجع الوحيد لما هو موجود فعلاً في المتجر. (لا يُطبَّق في جلسة الأدمن) */
+function pruneStaleCaches(indexItems) {
+  try {
+    if (sessionStorage.getItem(DB_KEYS.session) === "1") return;
+    const ids = new Set((indexItems || []).map(function (r) { return r ? String(r.id || r.objectID || "") : ""; }).filter(Boolean));
+    LS.keys().forEach(function (k) {
+      if (k && (k.indexOf("ws_products_category_") === 0 || k.indexOf("ws_products_filter_") === 0)) LS.remove(k);
+    });
+    _wholeProducts = null;
+    Object.keys(_matchCache).forEach(function (k) { delete _matchCache[k]; });
+    const cur = Store.getProducts();
+    const kept = cur.filter(function (p) { return p && ids.has(String(p.id || p.objectID || "")); });
+    if (kept.length !== cur.length) writeProductsLocal(kept);
+    LS.set(DB_KEYS.productsCount, String(ids.size));
+  } catch (e) { console.error("pruneStaleCaches error:", e); }
+}
+
 const Store = {
   getProductsCount() {
     const metaCount = LS.get(DB_KEYS.productsCount);
@@ -627,7 +647,7 @@ const Store = {
     if (!firebaseEnabled) return;
     const have = this.hasIndexLocal();
     const checked = Number(LS.get(IDX_CHECKED) || 0);
-    if (!force && have && (Date.now() - checked) < META_CACHE_MS) return;
+    if (!force && have && (Date.now() - checked) < INDEX_CHECK_MS) return;
     return dedupe("indexFresh", async () => {
       let remoteV;
       try { remoteV = await restGet(DB_KEYS.index + "/v", "", 8000); }
@@ -642,7 +662,10 @@ const Store = {
       }
       if (have && String(LS.get(IDX_V)) === String(remoteV)) { LS.set(IDX_CHECKED, String(Date.now())); return; }
       const items = await restGet(DB_KEYS.index + "/items", "", 30000);
-      storeIndexLocal({ v: remoteV, items: firebaseValueToArray(items) });
+      const freshItems = firebaseValueToArray(items);
+      storeIndexLocal({ v: remoteV, items: freshItems });
+      pruneStaleCaches(freshItems);              // يحذف أي منتج محذوف من كاش الزائر
+      if (have) emitStoreEvent("store:synced");  // الصفحة المفتوحة تعيد رسم المنتجات تلقائياً
       // تنظيف كاش المنتجات الكامل القديم إن كان كبيراً (كان يُملأ بالتحميل الكامل سابقاً)
       const old = LS.get(DB_KEYS.products);
       if (old && old.length > 1000000) LS.remove(DB_KEYS.products);
@@ -1138,3 +1161,21 @@ function flushPendingOrders() {
   q.forEach(function (o) { postOrderRest(o).catch(function () { queuePendingOrder(o); }); });
 }
 window.addEventListener("load", function () { setTimeout(flushPendingOrders, 3000); });
+
+/* إعادة فحص التحديثات تلقائياً: عند رجوع الزائر للتبويب، أو استعادة الصفحة من ذاكرة المتصفح (bfcache)،
+   أو عودة الإنترنت، وكل 5 دقائق والصفحة ظاهرة. الفحص خفيف (رقم نسخة فقط) ولا يُنزَّل شيء إن لم يتغيّر شيء. */
+(function () {
+  let busy = false;
+  function recheck() {
+    if (!firebaseEnabled || busy || typeof Store === "undefined") return;
+    busy = true;
+    Promise.all([
+      Store.ensureIndexFresh().catch(function () {}),
+      pullFromFirebase().catch(function () {})
+    ]).then(function () { busy = false; }, function () { busy = false; });
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) recheck(); });
+  window.addEventListener("pageshow", function (e) { if (e.persisted) recheck(); });
+  window.addEventListener("online", recheck);
+  setInterval(function () { if (!document.hidden) recheck(); }, 5 * 60 * 1000);
+})();
