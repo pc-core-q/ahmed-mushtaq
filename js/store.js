@@ -5,8 +5,9 @@
 
 const META_CACHE_MS = 30 * 60 * 1000;   // مدة الكاش: 30 دقيقة (الفهرس يُفحص برقم نسخة صغير جداً، ولا يُنزَّل إلا إذا تغيّر)
 const QUERY_CACHE_MS = 2 * 60 * 1000;
-const INDEX_CHECK_MS = 60 * 1000;      // فحص رقم نسخة الفهرس (بايتات قليلة) كل دقيقة كحد أقصى → الحذف/الإضافة تصل للزبون خلال دقيقة
-const META_PULL_MS = 5 * 60 * 1000;    // الأقسام/الإعلانات/الإعدادات كل 5 دقائق
+const REFRESH_MS = 15 * 60 * 1000;     // مهلة التحديث الوحيدة: كل 15 دقيقة يفحص الموقع تلقائياً (للمنتجات والأقسام والإعلانات)
+const INDEX_CHECK_MS = REFRESH_MS;
+const META_PULL_MS = REFRESH_MS;
 const PRODUCT_CACHE_LIMIT = 5000;
 const FETCH_TIMEOUT_MS = 15000;
 
@@ -1163,7 +1164,7 @@ function flushPendingOrders() {
 window.addEventListener("load", function () { setTimeout(flushPendingOrders, 3000); });
 
 /* إعادة فحص التحديثات تلقائياً: عند رجوع الزائر للتبويب، أو استعادة الصفحة من ذاكرة المتصفح (bfcache)،
-   أو عودة الإنترنت، وكل 5 دقائق والصفحة ظاهرة. الفحص خفيف (رقم نسخة فقط) ولا يُنزَّل شيء إن لم يتغيّر شيء. */
+   أو عودة الإنترنت، وكل دقيقة تفحص هل انقضت مهلة الـ15 دقيقة (محلياً بلا شبكة) والصفحة ظاهرة. الفحص خفيف (رقم نسخة فقط) ولا يُنزَّل شيء إن لم يتغيّر شيء. */
 (function () {
   let busy = false;
   function recheck() {
@@ -1177,5 +1178,5 @@ window.addEventListener("load", function () { setTimeout(flushPendingOrders, 300
   document.addEventListener("visibilitychange", function () { if (!document.hidden) recheck(); });
   window.addEventListener("pageshow", function (e) { if (e.persisted) recheck(); });
   window.addEventListener("online", recheck);
-  setInterval(function () { if (!document.hidden) recheck(); }, 5 * 60 * 1000);
+  setInterval(function () { if (!document.hidden) recheck(); }, 60 * 1000);   // فحص محلي فقط؛ لا طلب شبكة إلا إذا انقضت مهلة الـ15 دقيقة
 })();

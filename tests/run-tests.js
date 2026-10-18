@@ -190,6 +190,7 @@ async function atest(name, fn) {
       if (u === "ws_index/v") body = state.v === undefined ? null : state.v;
       else if (u === "ws_index/items") body = state.items;
       else if (u === "ws_products") body = state.products;
+      else if (state.nodes && Object.prototype.hasOwnProperty.call(state.nodes, u)) body = state.nodes[u];
       else body = null;
       const text = JSON.stringify(body);
       state.bytes += text.length;
@@ -265,13 +266,27 @@ async function atest(name, fn) {
     assert.strictEqual(S.getIndexItems().length, 2);
     // الأدمن يحذف B → رقم النسخة يتغيّر
     st.v = 2000; st.items = [buildRec(A)];
-    e.localStorage.setItem("ws_index_checked", String(Date.now() - 61 * 1000));   // مرّت دقيقة
+    e.localStorage.setItem("ws_index_checked", String(Date.now() - 16 * 60 * 1000));   // مرّت دقيقة
     await S.ensureIndexFresh();
     assert.strictEqual(S.getIndexItems().length, 1, "الفهرس لم يُحدَّث");
     assert.ok(!S.getProducts().some(p => p.id === B.id), "B ما زال في كاش المنتجات");
     assert.strictEqual(e.localStorage.getItem("ws_products_category_x"), null);
     assert.strictEqual(e.localStorage.getItem("ws_products_filter_featured"), null);
     assert.ok(synced >= 1, "لم يُرسَل store:synced");
+  });
+
+  await atest("إعلان محذوف: الزائر العائد يفقده بعد السحب (وإعلان مضاف يظهر)", async () => {
+    const st = { requests: [], bytes: 0, v: 1, items: [], nodes: { ws_ads: null, ws_categories: null, ws_settings: {} } };
+    const e = fbEnv(st), S = vm.runInContext("Store", e);
+    e.localStorage.setItem("ws_ads", JSON.stringify([{ id: "a1", image: "x.jpg" }]));
+    let synced = 0; e.document.addEventListener("store:synced", () => { synced++; });
+    await vm.runInContext("pullFromFirebase", e)();
+    assert.deepStrictEqual(S.getAds(), [], "الإعلان المحذوف بقي");
+    assert.ok(synced >= 1);
+    st.nodes.ws_ads = { a2: { id: "a2", image: "y.jpg" } };
+    e.localStorage.setItem("last_meta_pull_time", String(Date.now() - 16 * 60 * 1000));
+    await vm.runInContext("pullFromFirebase", e)();
+    assert.strictEqual(S.getAds().length, 1);
   });
 
   console.log("\nالنتيجة: " + passed + " نجح، " + failed + " فشل");
