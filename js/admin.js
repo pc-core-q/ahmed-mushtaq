@@ -1,8 +1,6 @@
 /* ==========================================================================
    admin.js
    منطق لوحة تحكم الأدمن بالكامل (admin.html). 
-   تم التحديث: سقف استيراد الإكسل (STORE_CONFIG.maxExcelImportCount)، ومزامنة Algolia التلقائية،
-   وحماية الكتابة (لا حفظ للمنتجات قبل اكتمال تحميلها)، وتهريب كل نص ديناميكي (XSS).
    ========================================================================== */
 
 let editingProductId = null;
@@ -11,13 +9,9 @@ let editingAdId = null;
 let pendingProductImage = null; 
 let pendingCategoryImage = null; 
 let pendingAdImage = null; 
-let pendingColors = [];        // [{ name, hex, image }]
-let pendingSizes = [];         // ["S", "M", ...]
-let pendingInventory = {};     // { "لون||مقاس": qty }
-
-/* ---------------------------------------------------------------------- */
-/* ملاحظة: escapeHtml و jsStr معرّفتان في app.js (يُحمَّل قبل هذا الملف)   */
-/* ---------------------------------------------------------------------- */
+let pendingColors = [];
+let pendingSizes = [];
+let pendingInventory = {};
 
 async function initAdminPage() {
   const app = document.getElementById("adminApp");
@@ -27,16 +21,16 @@ async function initAdminPage() {
     if (!isAuthed) return;
   }
 
-  // لوحة الأدمن تحتاج القائمة الكاملة، بينما المتجر العام لا يسحبها.
+  // سحب مباشر لبيانات السيرفر وتخطي الكاش
+  await pullFromFirebase(true);
   await Store.loadAllProductsFromFirebase(true);
-  // بناء فهرس المتجر الخفيف (ws_index) تلقائياً إن لم يكن موجوداً (مرة واحدة)؛ بعدها يُحدَّث مع كل حفظ للمنتجات
-  Store.rebuildIndex(false).then(function (ok) {
-    if (!ok) showAdminBanner("تعذّر إنشاء/قراءة فهرس المتجر ws_index. أضف قاعدة ws_index إلى Firebase Rules (انظر STORE_AI_GUIDE القسم 19) ثم حدّث الصفحة؛ حتى ذلك الحين يعمل المتجر بالطريقة القديمة (استهلاك أعلى).");
-  });
-  // جلب أحدث الطلبات من السيرفر فور فتح لوحة التحكم
   await Store.loadOrdersFromFirebase();
 
-  // إن فشل تحميل كل المنتجات فالكاش قد يكون جزئياً: نمنع الحفظ (يستبدل ws_products كاملة) حتى لا يضيع الكتالوج
+  // التأكد من بناء الفهرس ومزامنته
+  Store.rebuildIndex(false).then(function (ok) {
+    if (!ok) showAdminBanner("تعذّر إنشاء/قراءة فهرس المتجر ws_index. أضف قاعدة ws_index إلى Firebase Rules ثم حدّث الصفحة.");
+  });
+
   if (!Store.canWriteProducts()) {
     showAdminBanner("تعذّر تحميل كل المنتجات من الخادم، لذلك أُوقف حفظ/حذف المنتجات مؤقتاً لحماية بياناتك. تحقق من الاتصال ثم حدّث الصفحة.");
   }
@@ -80,19 +74,12 @@ function showAdminBanner(message) {
   main.insertBefore(box, main.firstChild);
 }
 
-// يتأكد أن حفظ المنتجات مسموح (تم تحميل كل المنتجات من الخادم) وإلا يعرض رسالة ويمنع العملية
 function ensureProductsWritable() {
   if (Store.canWriteProducts()) return true;
   showToast("لم يكتمل تحميل المنتجات من الخادم، لذلك أُوقف الحفظ لحماية بياناتك. حدّث الصفحة ثم أعد المحاولة.", "error");
   return false;
 }
 
-/* ---------------------------------------------------------------------- */
-/* مزامنة البيانات مع محرك البحث Algolia                                  */
-/* ---------------------------------------------------------------------- */
-
-/* مفتاح Algolia الإداري (Admin API Key) يتيح تعديل/حذف الفهرس بالكامل، فلا يجوز وضعه في config.js
-   لأن الملف يُحمَّل لكل زائر. يُطلب من الأدمن مرة واحدة لكل جلسة ويُحفظ في sessionStorage فقط. */
 let _algoliaKeyDeclined = false;
 function algoliaConfigured() {
   const cfg = typeof STORE_CONFIG !== "undefined" ? STORE_CONFIG : {};
@@ -116,20 +103,19 @@ function requestAlgoliaAdminKey() {
     showToast("تم تخطي مزامنة Algolia في هذه الجلسة.", "error");
     return "";
   }
-  try { sessionStorage.setItem("ws_algolia_admin_key", key); } catch (e) { /* نبقيه في الذاكرة لهذه العملية فقط */ }
+  try { sessionStorage.setItem("ws_algolia_admin_key", key); } catch (e) {}
   return key;
 }
 
 async function syncProductsToAlgolia(productsList) {
   const cfg = typeof STORE_CONFIG !== "undefined" ? STORE_CONFIG : {};
-  if (!algoliaConfigured()) return; // Algolia غير مفعل
+  if (!algoliaConfigured()) return;
   const adminKey = requestAlgoliaAdminKey();
-  if (!adminKey) return;            // لا مفتاح → لا مزامنة
+  if (!adminKey) return;
 
   const indexName = cfg.algoliaIndexName || "products";
   const url = `https://${cfg.algoliaAppId}.algolia.net/1/indexes/${encodeURIComponent(indexName)}/batch`;
 
-  // إرسال المنتجات المتوفرة فقط وتجريد الحقول الثقيلة
   const requests = [];
   productsList.forEach(p => {
     const isAvail = Store.isProductAvailable(p);
@@ -199,10 +185,6 @@ async function deleteProductFromAlgolia(productId) {
   }
 }
 
-/* ---------------------------------------------------------------------- */
-/* مزامنة واستيراد الأسعار والمخزون عبر ملفات Excel / CSV                 */
-/* ---------------------------------------------------------------------- */
-
 function wireExcelSync() {
   const fileInput = document.getElementById("excelSyncInput") || document.querySelector('input[type="file"][accept=".xlsx, .xls, .csv"]');
   if (!fileInput) return;
@@ -235,7 +217,6 @@ function wireExcelSync() {
       const priceKeys = ["السعر", "سعر البيع", "سعر المفرد", "price"];
       const stockKeys = ["الكمية", "المخزون", "الرصيد", "stock", "qty"];
 
-      // قراءة رقم من خلية Excel/CSV: يدعم الأرقام العربية وفواصل الآلاف ("1,500" كانت تُقرأ 1). فارغ/غير رقمي → null
       const parseCellNumber = (raw) => {
         if (raw === null || raw === undefined || raw === "") return null;
         if (typeof raw === "number") return isFinite(raw) ? raw : null;
@@ -248,7 +229,6 @@ function wireExcelSync() {
         return isFinite(n) ? n : null;
       };
 
-      // 1. استخراج الصفوف (السعر/الكمية الفارغان = null أي "لا تغيّر"، بدل اعتبارهما 0 وكتابة سعر 0 فوق السعر الحالي)
       const validRows = [];
       rows.forEach(row => {
         const barcodeVal = getVal(row, barcodeKeys)?.toString().trim();
@@ -268,7 +248,6 @@ function wireExcelSync() {
         return;
       }
 
-      // 2. سقف الاستيراد لحماية الباقة
       const MAX_IMPORT = (typeof STORE_CONFIG !== "undefined" && STORE_CONFIG.maxExcelImportCount) || 1000;
       if (validRows.length > MAX_IMPORT) {
         alert(`الملف يحتوي على (${validRows.length}) صف.\nالحد الأقصى المسموح باستيراده دفعة واحدة هو (${MAX_IMPORT}) صف لحماية الحساب.\nيرجى تقسيم الملف أو رفع maxExcelImportCount في config.js.`);
@@ -296,7 +275,6 @@ function wireExcelSync() {
 
           if (item.stockVal !== null) {
             if (Store.hasVariantMatrix(existingProduct)) {
-              // المخزون الفعلي لهذه المنتجات في شبكة inventory (لون×مقاس)؛ تحديث stock وحده يسبّب تناقضاً
               matrixStockSkipped++;
             } else {
               existingProduct.stock = item.stockVal;
@@ -311,7 +289,6 @@ function wireExcelSync() {
           touchedProducts.push(existingProduct);
           updatedCount++;
         } else {
-          // منتج جديد: يلزم اسم وسعر صالح وكمية > 0 (لا ننشئ منتجاً بسعر 0 أو بدون مخزون)
           if (!item.nameVal || !(item.priceVal > 0) || !(item.stockVal > 0)) { skippedNewCount++; return; }
           const newProduct = {
             id: uid("prd"),
@@ -342,10 +319,9 @@ function wireExcelSync() {
         return;
       }
 
-      // 3. الحفظ في Firebase (نتأكد من نجاح الكتابة) ثم المزامنة مع Algolia
       const saved = await Store.saveProducts(products);
       if (saved === false) {
-        alert("تعذّر حفظ التغييرات على الخادم (تحقق من الاتصال وصلاحيات Firebase). حدّث الصفحة وأعد المحاولة.");
+        alert("تعذّر حفظ التغييرات على الخادم. حدّث الصفحة وأعد المحاولة.");
         return;
       }
       await syncProductsToAlgolia(touchedProducts);
@@ -369,10 +345,6 @@ function wireExcelSync() {
     }
   });
 }
-
-/* ---------------------------------------------------------------------- */
-/* رفع الصور ومعالجتها الذكية بدقة عالية عبر ImageKit CDN                 */
-/* ---------------------------------------------------------------------- */
 
 async function uploadToImgBB(file, isBanner = false) {
   if (!file) throw new Error("لم يتم اختيار ملف");
@@ -430,10 +402,6 @@ async function uploadToImgBB(file, isBanner = false) {
   return imageKitEndpoint + "/" + transform + "/" + match[1];
 }
 
-/* ---------------------------------------------------------------------- */
-/* التنقّل بين الأقسام وإدارة القائمة الجانبية                            */
-/* ---------------------------------------------------------------------- */
-
 function wireSidebarNav() {
   const buttons = document.querySelectorAll(".admin-nav button[data-panel]");
   buttons.forEach(function (btn) {
@@ -459,10 +427,6 @@ window.toggleAdminSidebar = function() {
   if (overlay) overlay.classList.toggle('active');
 };
 
-/* ---------------------------------------------------------------------- */
-/* لوحة الإحصائيات                                                       */
-/* ---------------------------------------------------------------------- */
-
 function renderStats() {
   const products = Store.getProducts();
   const outOfStock = products.filter(function (p) { return !Store.isProductAvailable(p); }).length;
@@ -478,10 +442,6 @@ function renderStats() {
     return '<div class="stat-card"><div class="num">' + s.num + '</div><div class="label">' + s.label + "</div></div>";
   }).join("");
 }
-
-/* ---------------------------------------------------------------------- */
-/* جدول المنتجات                                                        */
-/* ---------------------------------------------------------------------- */
 
 function renderProductsTable() {
   const tbody = document.getElementById("productsTableBody");
@@ -560,10 +520,6 @@ function populateCategorySelect() {
   }).join("");
 }
 
-/* ---------------------------------------------------------------------- */
-/* الألوان + المقاسات + المخزون لكل تركيبة                                 */
-/* ---------------------------------------------------------------------- */
-
 function currentSizesFromInput() {
   const input = document.getElementById("productSizes");
   if (!input) return [];
@@ -580,17 +536,14 @@ function renderColorsList() {
     list.innerHTML = pendingColors.map(function (c, idx) {
       return (
         '<div class="color-row" style="display:flex;flex-wrap:wrap;align-items:center;gap:15px;background:var(--olive-50);padding:15px;border-radius:8px;border:1px solid var(--line);margin-bottom:10px;">' +
-          
           '<div style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:5px;">' +
             '<label style="font-size:0.8rem;color:var(--ink-400);">اسم اللون</label>' +
             '<input type="text" placeholder="مثال: أسود" value="' + escapeHtml(c.name || "") + '" data-color-idx="' + idx + '" class="color-name-input" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;background:#fff;">' +
           '</div>' +
-          
           '<div style="display:flex;flex-direction:column;gap:5px;align-items:center;">' +
             '<label style="font-size:0.8rem;color:var(--ink-400);">الدرجة</label>' +
             '<input type="color" value="' + escapeHtml(/^#[0-9a-fA-F]{6}$/.test(c.hex || "") ? c.hex : "#7c9a4c") + '" data-color-idx="' + idx + '" class="color-hex-input" style="width:38px;height:38px;padding:0;border:none;cursor:pointer;border-radius:50%;">' +
           '</div>' +
-          
           '<div class="image-upload" style="margin:0;display:flex;flex-direction:column;gap:5px;min-width:120px;">' +
             '<label style="font-size:0.8rem;color:var(--ink-400);">صورة اللون (اختياري)</label>' +
             '<div style="display:flex;align-items:center;gap:10px;">' +
@@ -600,11 +553,9 @@ function renderColorsList() {
               '<input type="file" accept="image/*" class="color-image-input" data-color-idx="' + idx + '" style="width:90px;font-size:0.8rem;">' +
             '</div>' +
           '</div>' +
-          
           '<div style="display:flex;align-items:flex-end;height:100%;padding-bottom:2px;">' +
             '<button type="button" class="btn-icon btn-sm" style="color:var(--danger);background:#fee2e2;border-radius:6px;width:38px;height:38px;" title="حذف اللون" onclick="removeColorRow(' + idx + ')">' + iconSvg("trash") + '</button>' +
           '</div>' +
-          
         '</div>'
       );
     }).join("");
@@ -721,8 +672,6 @@ function updateComputedStock() {
   const total = Object.values(pendingInventory).reduce(function (sum, n) { return sum + (Number(n) || 0); }, 0);
   stockInput.value = total;
 }
-
-/* ---- مودال إضافة/تعديل منتج ---- */
 
 function wireProductModal() {
   const addBtn = document.getElementById("addProductBtn");
@@ -968,15 +917,13 @@ async function saveProductForm(e) {
     savedProduct = Store.addProduct(data);
   }
 
-  // نتأكد من نجاح الكتابة على الخادم قبل إعلان النجاح (كان يُعلن النجاح دائماً حتى لو رُفضت الكتابة)
   const persisted = await Store.whenProductsSaved();
   if (persisted === false) {
-    showToast("لم يُحفظ المنتج على الخادم (تحقق من الاتصال وصلاحيات Firebase). النافذة مفتوحة لإعادة المحاولة.", "error");
+    showToast("لم يُحفظ المنتج على الخادم. النافذة مفتوحة لإعادة المحاولة.", "error");
     return;
   }
   showToast(editingProductId ? "تم تحديث المنتج" : "تمت إضافة المنتج", "success");
 
-  // مزامنة المنتج مع Algolia
   if (savedProduct) {
     await syncProductsToAlgolia([savedProduct]);
   }
@@ -985,10 +932,6 @@ async function saveProductForm(e) {
   renderProductsTable();
   renderStats();
 }
-
-/* ---------------------------------------------------------------------- */
-/* الأقسام                                                               */
-/* ---------------------------------------------------------------------- */
 
 function renderCategoriesTable() {
   const tbody = document.getElementById("categoriesTableBody");
@@ -1027,10 +970,9 @@ function renderCategoriesTable() {
 function deleteCategoryConfirm(id) {
   const category = Store.getCategories().find(function (c) { return c.id === id; });
   if (!category) return;
-  // حذف قسم رئيسي له أقسام فرعية يجعل الفرعية يتيمة (تختفي هي ومنتجاتها من المتجر) → نمنعه
   const childCount = Store.getCategories().filter(function (c) { return c.parentId === id; }).length;
   if (childCount) {
-    showToast('لا يمكن حذف "' + category.name + '" لأن له ' + childCount + ' قسم فرعي. احذف الأقسام الفرعية أو انقلها لقسم آخر أولاً.', "error");
+    showToast('لا يمكن حذف "' + category.name + '" لأن له ' + childCount + ' قسم فرعي.', "error");
     return;
   }
   const productsInCat = Store.getProducts().filter(function (p) { return p.categoryId === id; }).length;
@@ -1134,7 +1076,6 @@ function openCategoryModal(categoryId) {
     allCats.filter(function(c) { return c.id !== categoryId && !c.parentId; })
            .map(function(c) { return '<option value="' + escapeHtml(c.id) + '">' + escapeHtml(c.name) + '</option>'; }).join("");
 
-  // قسم رئيسي لديه أقسام فرعية لا يجوز أن يصبح فرعياً (3 مستويات غير مدعومة)
   parentSelect.disabled = !!(categoryId && allCats.some(function (cc) { return cc.parentId === categoryId; }));
 
   if (categoryId) {
@@ -1187,10 +1128,6 @@ function saveCategoryForm(e) {
   renderCategoriesTable();
   populateCategorySelect();
 }
-
-/* ---------------------------------------------------------------------- */
-/* الإعلانات                                                             */
-/* ---------------------------------------------------------------------- */
 
 function renderAdsTable() {
   const tbody = document.getElementById("adsTableBody");
@@ -1306,10 +1243,6 @@ function saveAdForm(e) {
   renderAdsTable();
 }
 
-/* ---------------------------------------------------------------------- */
-/* سجلّ الطلبات ودالة خصم المخزون المتطورة                                 */
-/* ---------------------------------------------------------------------- */
-
 function orderInventoryKey(item) {
   return (item.color || "_") + "||" + (item.size || "_");
 }
@@ -1353,10 +1286,9 @@ window.changeOrderStatus = async function(orderId, selectElement) {
     });
 
     if (touched.size > 0) {
-      // كتابة واحدة لكل الطلب (كانت كتابة كاملة لقائمة المنتجات لكل بند)
       const ok = await Store.saveProducts(products);
       if (ok === false) {
-        showToast("تعذّر حفظ خصم المخزون على الخادم. لم يتغيّر الطلب. حدّث الصفحة وأعد المحاولة.", "error");
+        showToast("تعذّر حفظ خصم المخزون على الخادم. لم يتغيّر الطلب.", "error");
         selectElement.value = previousStatus;
         return;
       }
@@ -1365,9 +1297,9 @@ window.changeOrderStatus = async function(orderId, selectElement) {
 
     const saved = await updateOrderInFirebase(order.id, { status: "prepared", stockDeducted: true });
     if (!saved) {
-      showToast("تم خصم المخزون لكن تعذّر تحديث حالة الطلب على الخادم. حدّث الصفحة وتحقق من الطلب.", "error");
+      showToast("تم خصم المخزون لكن تعذّر تحديث حالة الطلب على الخادم.", "error");
     } else if (notDeducted.length) {
-      showToast("تم التجهيز، لكن لم تُخصم كمية: " + notDeducted.join("، ") + " (المخزون غير كافٍ أو المنتج محذوف).", "error");
+      showToast("تم التجهيز، لكن لم تُخصم كمية: " + notDeducted.join("، "), "error");
     } else {
       showToast("تم تجهيز الطلب وخصم المخزون بنجاح!", "success");
     }
@@ -1384,7 +1316,6 @@ window.changeOrderStatus = async function(orderId, selectElement) {
   renderOrdersTable();
 };
 
-/* يحدّث الطلب في Firebase أولاً ثم محلياً. يعيد true عند النجاح. */
 window.updateOrderInFirebase = async function(orderId, patch) {
   if (typeof database !== "undefined" && database) {
     try {
@@ -1402,10 +1333,10 @@ window.updateOrderInFirebase = async function(orderId, patch) {
   LS.set("ws_orders", JSON.stringify(list));
   return true;
 };
+
 function renderOrdersTable() {
   const tbody = document.getElementById("ordersTableBody");
   if (!tbody) return;
-  // ws_orders قابلة للكتابة من أي زائر (بدون خادم وسيط) → نعرض آخر 300 طلب فقط كي لا تُغرق لوحة التحكم بطلبات وهمية
   const ORDERS_VIEW_LIMIT = 300;
   const orders = Store.getOrders().slice(0, ORDERS_VIEW_LIMIT);
   const targets = [tbody, document.getElementById("ordersTableBody2")].filter(Boolean);
@@ -1420,7 +1351,6 @@ function renderOrdersTable() {
   const rowsHtml = orders.map(function (o) {
     const date = escapeHtml(new Date(o.date).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short" }));
     
-    // بناء عناصر المنتجات كقائمة أفقية ملمومة ومرتبة
     const itemsList = (o.items || []).map(function (it) {
       const opts = [];
       if (it.color) opts.push(escapeHtml(it.color));
@@ -1480,9 +1410,6 @@ function renderOrdersTable() {
 
   targets.forEach(function (t) { t.innerHTML = rowsHtml; });
 }
-/* ---------------------------------------------------------------------- */
-/* إعدادات المتجر                                                       */
-/* ---------------------------------------------------------------------- */
 
 function fillSettingsForm() {
   const form = document.getElementById("settingsForm");
