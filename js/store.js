@@ -5,7 +5,7 @@
 
 const META_CACHE_MS = 30 * 60 * 1000;   // مدة الكاش: 30 دقيقة (الفهرس يُفحص برقم نسخة صغير جداً، ولا يُنزَّل إلا إذا تغيّر)
 const QUERY_CACHE_MS = 2 * 60 * 1000;
-const REFRESH_MS = 15 * 60 * 1000;     // مهلة التحديث الوحيدة: كل 15 دقيقة يفحص الموقع تلقائياً (للمنتجات والأقسام والإعلانات)
+const REFRESH_MS = 1 * 60 * 1000;     // مهلة التحديث الوحيدة: كل 15 دقيقة يفحص الموقع تلقائياً (للمنتجات والأقسام والإعلانات)
 const INDEX_CHECK_MS = REFRESH_MS;
 const META_PULL_MS = REFRESH_MS;
 const PRODUCT_CACHE_LIMIT = 5000;
