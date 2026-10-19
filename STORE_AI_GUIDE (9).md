@@ -140,6 +140,7 @@ const STORE_CONFIG = {
   stock: Number,              // إجمالي المخزون (محسوب من inventory إذا وُجدت ألوان/مقاسات)
   available: true,            // تفعيل/إخفاء يدوي
   featured: false, isNew: false, isOffer: false,
+  oldPrice: 0,                // السعر قبل الخصم (اختياري): يظهر مشطوباً بجانب السعر فقط إذا isOffer=true و oldPrice > price
   image: "url",               // الصورة الرئيسية
   images: ["url", ...],       // صور إضافية
   colors: [{ name, hex, image }],
@@ -156,7 +157,7 @@ const STORE_CONFIG = {
 
 **الإعلان** (`ws_ads`): `{ id:"ad_xxx", image, link, order }` — يظهر في سلايدر الهيرو بالرئيسية.
 
-**الإعدادات** (`ws_settings`): `storeName, storeTagline, storeDescription, whatsapp, instagram, tiktok, phone, address, workingHours, deliveryInfo, currencySymbol`
+**الإعدادات** (`ws_settings`): `storeName, storeTagline, storeDescription, whatsapp, instagram, tiktok, phone, phone2, address, mapUrl, workingHours, deliveryInfo, currencySymbol` (phone2 هاتف ثانٍ اختياري؛ mapUrl رابط خرائط جوجل اختياري يجعل العنوان قابلاً للضغط في الفوتر وصفحة تواصل معنا ويقبل http/https فقط)
 
 **الطلب** (`ws_orders`)
 ```js
@@ -758,7 +759,7 @@ return d.secure_url;   // getIkUrl لن يعدّل هذا الرابط لأنه 
 ```
 /ws_index
   v: 1760000000000            ← رقم النسخة (Date.now() عند آخر بناء/حفظ)
-  items: [ { id, name, price, stock, categoryId?, image?, barcode?, available?:false, featured?, isOffer?, isNew?, colors?:[{name,hex}], sizes?, vc? }, ... ]
+  items: [ { id, name, price, stock, categoryId?, image?, barcode?, available?:false, featured?, isOffer?, oldPrice? (يُكتب فقط عند isOffer وأكبر من price), isNew?, colors?:[{name,hex}], sizes?, vc? }, ... ]
 ```
 - الحقول الاختيارية لا تُكتب إذا كانت فارغة/افتراضية (`available` تُكتب فقط عند `false`). `vc` = عدد الخيارات القديمة (variants).
 - `stock` = المخزون الحقيقي الكلي (من `inventory` إن وُجدت ألوان/مقاسات).

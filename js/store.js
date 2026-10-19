@@ -22,11 +22,11 @@ const DB_KEYS = {
   seeded: "ws_seeded_v1",
   ads: "ws_ads",
   productsCount: "ws_products_count_meta",
-  index: "ws_index"
+  index: "ws_index"          // عقدة Firebase: { v: رقم النسخة, items: [سجلات خفيفة لكل المنتجات] }
 };
-const IDX_ITEMS = "ws_index_items";
-const IDX_V = "ws_index_v";
-const IDX_CHECKED = "ws_index_checked";
+const IDX_ITEMS = "ws_index_items";      // نسخة الفهرس المحلية (JSON)
+const IDX_V = "ws_index_v";              // رقم نسخة الفهرس المحلي
+const IDX_CHECKED = "ws_index_checked";  // آخر وقت فُحص فيه رقم النسخة من الخادم
 
 const LS = (function () {
   let ok = true;
@@ -429,6 +429,8 @@ function seedIfNeeded() {
     instagram: cfg.instagram || "",
     tiktok: cfg.tiktok || "",
     phone: cfg.phone || "",
+    phone2: cfg.phone2 || "",
+    mapUrl: cfg.mapUrl || "",
     address: cfg.address || "",
     workingHours: cfg.workingHours || "",
     deliveryInfo: cfg.deliveryInfo || "",
@@ -506,6 +508,7 @@ function buildIndexRecord(p) {
   if (p.available === false) r.available = false;
   if (p.featured) r.featured = true;
   if (p.isOffer) r.isOffer = true;
+  if (p.isOffer && Number(p.oldPrice) > Number(p.price)) r.oldPrice = Number(p.oldPrice);
   if (p.isNew) r.isNew = true;
   if (Array.isArray(p.colors) && p.colors.length) r.colors = p.colors.map(function (c) { return { name: (c && c.name) || "", hex: (c && c.hex) || "" }; });
   if (Array.isArray(p.sizes) && p.sizes.length) r.sizes = p.sizes;
@@ -522,7 +525,7 @@ function hydrateIndexRecord(r) {
   const vc = Number(r.vc) || 0;
   const name = r.name || "", barcode = r.barcode || "";
   return {
-    id: r.id, objectID: r.id, name: name, price: Number(r.price) || 0,
+    id: r.id, objectID: r.id, name: name, price: Number(r.price) || 0, oldPrice: Number(r.oldPrice) || 0,
     categoryId: r.categoryId || "", image: r.image || null, barcode: barcode,
     available: r.available !== false, stock: Number(r.stock) || 0,
     featured: !!r.featured, isOffer: !!r.isOffer, isNew: !!r.isNew,
@@ -631,11 +634,11 @@ const Store = {
     if (!firebaseEnabled) return;
     return dedupe("indexFresh", async () => {
       let remoteV;
-      try {
-        remoteV = await restGet(DB_KEYS.index + "/v", "", 8000);
-      } catch (e) {
-        if (this.hasIndexLocal()) return;
-        throw e;
+      try { 
+        remoteV = await restGet(DB_KEYS.index + "/v", "", 8000); 
+      } catch (e) { 
+        if (this.hasIndexLocal()) return; 
+        throw e; 
       }
 
       if (remoteV === null || remoteV === undefined) {
@@ -644,8 +647,8 @@ const Store = {
         return;
       }
 
-      if (!force && this.hasIndexLocal() && String(LS.get(IDX_V)) === String(remoteV)) {
-        return;
+      if (!force && this.hasIndexLocal() && String(LS.get(IDX_V)) === String(remoteV)) { 
+        return; 
       }
 
       const items = await restGet(DB_KEYS.index + "/items", "", 30000);
@@ -949,6 +952,7 @@ const Store = {
       featured: false,
       isNew: false,
       isOffer: false,
+      oldPrice: 0,
       image: null,
       variants: [],
       variantImages: {},
@@ -1144,5 +1148,6 @@ window.addEventListener("load", function () { setTimeout(flushPendingOrders, 300
   document.addEventListener("visibilitychange", function () { if (!document.hidden) recheck(); });
   window.addEventListener("pageshow", function (e) { if (e.persisted) recheck(); });
   window.addEventListener("online", recheck);
-  setInterval(function () { if (!document.hidden) recheck(); }, 15 * 1000);
+// بهذا السطر (فحص كل 5 دقائق):
+setInterval(function () { if (!document.hidden) recheck(); }, 5 * 60 * 1000);
 })();

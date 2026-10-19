@@ -4,9 +4,25 @@
    ========================================================================== */
 
 function formatPrice(amount) {
-  const symbol = (Store.getSettings().currencySymbol) || "د.ع";
+  const symbol = (typeof Store !== "undefined" && Store.getSettings && Store.getSettings().currencySymbol) || "د.ع";
   const num = Number(amount) || 0;
   return num.toLocaleString("en-US") + " " + symbol;
+}
+
+/* سعر المنتج للعرض: عند العرض الخاص وتوفر سعر قديم أكبر من الجديد يظهر السعر الجديد مع القديم مشطوباً */
+function priceHtml(product) {
+  const price = Number(product && product.price) || 0;
+  const old = Number(product && product.oldPrice) || 0;
+  if (product && product.isOffer && price > 0 && old > price) {
+    return '<span class="price-sale">' + formatPrice(price) + '</span><span class="price-old">' + formatPrice(old) + '</span>';
+  }
+  return formatPrice(price);
+}
+
+/* رابط الخرائط: يُقبل http/https فقط */
+function safeMapUrl(url) {
+  const u = String(url || "").trim();
+  return /^https?:\/\/\S+$/i.test(u) ? u : "";
 }
 
 function whatsappDigitsOnly(number) {
@@ -35,8 +51,9 @@ function showDeliveryModal(onConfirm) {
           '<h3 style="margin:0;">معلومات التوصيل</h3>' +
           '<button class="close-modal" id="closeDeliveryModal" type="button">' + iconSvg("close") + '</button>' +
         '</div>' +
-        '<p style="font-size: .85rem; margin-top: -10px; margin-bottom: 20px;">يرجى إدخال عنوانك لإكمال الطلب عبر واتساب.</p>' +
+        '<p style="font-size: .85rem; margin-top: -10px; margin-bottom: 20px;">يرجى إدخال معلوماتك لإكمال الطلب عبر واتساب.</p>' +
         '<form id="deliveryForm">' +
+          '<div class="field"><label>الاسم الكامل *</label><input type="text" id="delName" placeholder="مثال: أحمد علي" autocomplete="name" required></div>' +
           '<div class="field"><label>المحافظة *</label><input type="text" id="delGov" placeholder="مثال: بغداد / كربلاء" autocomplete="address-level1" required></div>' +
           '<div class="field"><label>المنطقة *</label><input type="text" id="delArea" placeholder="مثال: حي الحسين" autocomplete="address-level2" required></div>' +
           '<div class="field"><label>أقرب نقطة دالة (اختياري)</label><input type="text" id="delLandmark" placeholder="مثال: قرب مجسر..."></div>' +
@@ -60,17 +77,15 @@ function showDeliveryModal(onConfirm) {
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") modal.classList.remove("open"); });
   }
 
-  // نستبدل النموذج بنسخة جديدة أولاً (لإزالة مستمعي submit القديمة) ثم نقرأ العناصر من النسخة الجديدة.
-  // (كان الكود يمسك عناصر النسخة القديمة المفصولة عن الصفحة فلا تظهر رسالة التحقق ولا يتعطل الزر)
   const oldForm = document.getElementById("deliveryForm");
   const newForm = oldForm.cloneNode(true);
   oldForm.parentNode.replaceChild(newForm, oldForm);
 
+  const nameInput = document.getElementById("delName");
   const phoneInput = document.getElementById("delPhone");
   const phoneHint = document.getElementById("phoneValidationHint");
   const submitBtn = document.getElementById("delSubmitBtn");
 
-  // التحقق اللحظي من رقم الهاتف العراقي (11 رقم يبدأ بـ 07)
   function validatePhoneNumber(value) {
     const clean = String(value || "").replace(/[^0-9]/g, "");
     const regex = /^07[3-9][0-9]{8}$/;
@@ -99,7 +114,7 @@ function showDeliveryModal(onConfirm) {
     }
   }
 
-  // تعبئة الحقول بالقيم المخزنة تلقائياً
+  if (nameInput) nameInput.value = saved.name || "";
   document.getElementById("delGov").value = saved.gov || "";
   document.getElementById("delArea").value = saved.area || "";
   document.getElementById("delLandmark").value = saved.landmark && saved.landmark !== "لا يوجد" ? saved.landmark : "";
@@ -110,7 +125,6 @@ function showDeliveryModal(onConfirm) {
   phoneHint.style.display = "none";
   phoneInput.style.borderColor = "";
 
-  // فحص الهاتف فور الفتح إن وُجدت قيمة محفوظة
   if (phoneInput.value) {
     validatePhoneNumber(phoneInput.value);
   }
@@ -130,6 +144,7 @@ function showDeliveryModal(onConfirm) {
     }
 
     const info = {
+      name: (document.getElementById("delName") ? document.getElementById("delName").value.trim() : ""),
       gov: document.getElementById("delGov").value.trim(),
       area: document.getElementById("delArea").value.trim(),
       landmark: document.getElementById("delLandmark").value.trim() || "لا يوجد",
@@ -137,7 +152,6 @@ function showDeliveryModal(onConfirm) {
       notes: document.getElementById("delNotes") ? document.getElementById("delNotes").value.trim() : ""
     };
 
-    // حفظ بيانات التوصيل تلقائياً في localStorage للمرات القادمة
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(info));
     } catch (err) {}
@@ -187,7 +201,8 @@ function buildProductWhatsAppLink(product, qty, info, selection) {
     "- الكمية: " + quantity,
     "- السعر: *" + formatPrice(total) + "* (غير شامل أجور التوصيل)",
     "",
-    " *معلومات التوصيل:*",
+    " *معلومات الزبون والتوصيل:*",
+    info.name ? "- اسم الزبون: *" + info.name + "*" : null,
     "- المحافظة: *" + info.gov + "*",
     "- المنطقة: *" + info.area + "*",
     "- أقرب نقطة دالة: " + info.landmark,
@@ -220,7 +235,10 @@ function buildCartWhatsAppLink(cartLines, products, info) {
   messageLines.push("");
   messageLines.push(" *السعر الإجمالي:* *" + formatPrice(total) + "* (غير شامل أجور التوصيل)");
   messageLines.push("");
-  messageLines.push(" *معلومات التوصيل:*");
+  messageLines.push(" *معلومات الزبون والتوصيل:*");
+  if (info.name) {
+    messageLines.push(" اسم الزبون: *" + info.name + "*");
+  }
   messageLines.push(" المحافظة: *" + info.gov + "*");
   messageLines.push(" المنطقة: *" + info.area + "*");
   messageLines.push(" أقرب نقطة دالة: " + info.landmark);
@@ -249,6 +267,7 @@ function orderSingleProductViaWhatsApp(product, qty, selection) {
     Store.logOrder({
       type: "single",
       customer: {
+        name: info.name || "",
         gov: info.gov,
         area: info.area,
         landmark: info.landmark,
@@ -308,6 +327,7 @@ function orderCartViaWhatsApp() {
     Store.logOrder({
       type: "cart",
       customer: {
+        name: info.name || "",
         gov: info.gov,
         area: info.area,
         landmark: info.landmark,

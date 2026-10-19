@@ -1,6 +1,8 @@
 /* ==========================================================================
    admin.js
    منطق لوحة تحكم الأدمن بالكامل (admin.html). 
+   تم التحديث: سقف استيراد الإكسل (STORE_CONFIG.maxExcelImportCount)، ومزامنة Algolia التلقائية،
+   وحماية الكتابة (لا حفظ للمنتجات قبل اكتمال تحميلها)، وتهريب كل نص ديناميكي (XSS).
    ========================================================================== */
 
 let editingProductId = null;
@@ -9,9 +11,13 @@ let editingAdId = null;
 let pendingProductImage = null; 
 let pendingCategoryImage = null; 
 let pendingAdImage = null; 
-let pendingColors = [];
-let pendingSizes = [];
-let pendingInventory = {};
+let pendingColors = [];        // [{ name, hex, image }]
+let pendingSizes = [];         // ["S", "M", ...]
+let pendingInventory = {};     // { "لون||مقاس": qty }
+
+/* ---------------------------------------------------------------------- */
+/* ملاحظة: escapeHtml و jsStr معرّفتان في app.js (يُحمَّل قبل هذا الملف)   */
+/* ---------------------------------------------------------------------- */
 
 async function initAdminPage() {
   const app = document.getElementById("adminApp");
@@ -28,9 +34,10 @@ async function initAdminPage() {
 
   // التأكد من بناء الفهرس ومزامنته
   Store.rebuildIndex(false).then(function (ok) {
-    if (!ok) showAdminBanner("تعذّر إنشاء/قراءة فهرس المتجر ws_index. أضف قاعدة ws_index إلى Firebase Rules ثم حدّث الصفحة.");
+    if (!ok) showAdminBanner("تعذّر إنشاء/قراءة فهرس المتجر ws_index. أضف قاعدة ws_index إلى Firebase Rules (انظر STORE_AI_GUIDE القسم 19) ثم حدّث الصفحة؛ حتى ذلك الحين يعمل المتجر بالطريقة القديمة (استهلاك أعلى).");
   });
 
+  // إن فشل تحميل كل المنتجات فالكاش قد يكون جزئياً: نمنع الحفظ لحماية البيانات
   if (!Store.canWriteProducts()) {
     showAdminBanner("تعذّر تحميل كل المنتجات من الخادم، لذلك أُوقف حفظ/حذف المنتجات مؤقتاً لحماية بياناتك. تحقق من الاتصال ثم حدّث الصفحة.");
   }
@@ -62,6 +69,35 @@ async function initAdminPage() {
 
   const productSearch = document.getElementById("adminProductSearch");
   if (productSearch) productSearch.addEventListener("input", renderProductsTable);
+
+  showUpdateNotice();
+}
+
+/* ---------------------------------------------------------------------- */
+/* إشعار "تم تحديث الموقع" — يظهر مرة واحدة فقط لكل إصدار                */
+/* لإظهاره مجدداً بعد تحديث جديد: غيّر UPDATE_NOTICE_ID وحدّث القائمة في admin.html */
+/* ---------------------------------------------------------------------- */
+const UPDATE_NOTICE_ID = "2026-10-19";
+const UPDATE_NOTICE_KEY = "ws_admin_update_seen";
+
+function showUpdateNotice() {
+  const modal = document.getElementById("updateModal");
+  if (!modal) return;
+  try { if (localStorage.getItem(UPDATE_NOTICE_KEY) === UPDATE_NOTICE_ID) return; } catch (e) {}
+
+  const closeBtn = document.getElementById("closeUpdateModal");
+  const okBtn = document.getElementById("updateModalOk");
+  if (closeBtn) closeBtn.innerHTML = iconSvg("close");
+
+  function dismiss() {
+    modal.classList.remove("open");
+    try { localStorage.setItem(UPDATE_NOTICE_KEY, UPDATE_NOTICE_ID); } catch (e) {}
+  }
+  if (closeBtn) closeBtn.addEventListener("click", dismiss);
+  if (okBtn) okBtn.addEventListener("click", dismiss);
+  modal.addEventListener("click", function (e) { if (e.target === modal) dismiss(); });
+
+  modal.classList.add("open");
 }
 
 function showAdminBanner(message) {
@@ -74,11 +110,16 @@ function showAdminBanner(message) {
   main.insertBefore(box, main.firstChild);
 }
 
+// يتأكد أن حفظ المنتجات مسموح
 function ensureProductsWritable() {
   if (Store.canWriteProducts()) return true;
   showToast("لم يكتمل تحميل المنتجات من الخادم، لذلك أُوقف الحفظ لحماية بياناتك. حدّث الصفحة ثم أعد المحاولة.", "error");
   return false;
 }
+
+/* ---------------------------------------------------------------------- */
+/* مزامنة البيانات مع محرك البحث Algolia                                  */
+/* ---------------------------------------------------------------------- */
 
 let _algoliaKeyDeclined = false;
 function algoliaConfigured() {
@@ -126,6 +167,7 @@ async function syncProductsToAlgolia(productsList) {
           objectID: p.id,
           name: p.name || "",
           price: Number(p.price) || 0,
+          oldPrice: Number(p.oldPrice) || 0,
           categoryId: p.categoryId || "",
           image: p.image || "",
           colors: (p.colors || []).map(c => ({ name: c.name, hex: c.hex })),
@@ -184,6 +226,10 @@ async function deleteProductFromAlgolia(productId) {
     console.error("فشل حذف المنتج من Algolia:", err);
   }
 }
+
+/* ---------------------------------------------------------------------- */
+/* مزامنة واستيراد الأسعار والمخزون عبر ملفات Excel / CSV                 */
+/* ---------------------------------------------------------------------- */
 
 function wireExcelSync() {
   const fileInput = document.getElementById("excelSyncInput") || document.querySelector('input[type="file"][accept=".xlsx, .xls, .csv"]');
@@ -296,6 +342,7 @@ function wireExcelSync() {
             barcode: item.barcodeVal || "",
             sku: item.barcodeVal || "",
             price: item.priceVal,
+            oldPrice: 0,
             stock: item.stockVal,
             categoryId: "",
             available: true,
@@ -345,6 +392,10 @@ function wireExcelSync() {
     }
   });
 }
+
+/* ---------------------------------------------------------------------- */
+/* رفع الصور ومعالجتها الذكية بدقة عالية عبر ImageKit CDN                 */
+/* ---------------------------------------------------------------------- */
 
 async function uploadToImgBB(file, isBanner = false) {
   if (!file) throw new Error("لم يتم اختيار ملف");
@@ -402,6 +453,10 @@ async function uploadToImgBB(file, isBanner = false) {
   return imageKitEndpoint + "/" + transform + "/" + match[1];
 }
 
+/* ---------------------------------------------------------------------- */
+/* التنقّل بين الأقسام وإدارة القائمة الجانبية                            */
+/* ---------------------------------------------------------------------- */
+
 function wireSidebarNav() {
   const buttons = document.querySelectorAll(".admin-nav button[data-panel]");
   buttons.forEach(function (btn) {
@@ -427,6 +482,10 @@ window.toggleAdminSidebar = function() {
   if (overlay) overlay.classList.toggle('active');
 };
 
+/* ---------------------------------------------------------------------- */
+/* لوحة الإحصائيات                                                       */
+/* ---------------------------------------------------------------------- */
+
 function renderStats() {
   const products = Store.getProducts();
   const outOfStock = products.filter(function (p) { return !Store.isProductAvailable(p); }).length;
@@ -442,6 +501,10 @@ function renderStats() {
     return '<div class="stat-card"><div class="num">' + s.num + '</div><div class="label">' + s.label + "</div></div>";
   }).join("");
 }
+
+/* ---------------------------------------------------------------------- */
+/* جدول المنتجات                                                        */
+/* ---------------------------------------------------------------------- */
 
 function renderProductsTable() {
   const tbody = document.getElementById("productsTableBody");
@@ -520,6 +583,10 @@ function populateCategorySelect() {
   }).join("");
 }
 
+/* ---------------------------------------------------------------------- */
+/* الألوان + المقاسات + المخزون لكل تركيبة                                 */
+/* ---------------------------------------------------------------------- */
+
 function currentSizesFromInput() {
   const input = document.getElementById("productSizes");
   if (!input) return [];
@@ -536,14 +603,17 @@ function renderColorsList() {
     list.innerHTML = pendingColors.map(function (c, idx) {
       return (
         '<div class="color-row" style="display:flex;flex-wrap:wrap;align-items:center;gap:15px;background:var(--olive-50);padding:15px;border-radius:8px;border:1px solid var(--line);margin-bottom:10px;">' +
+          
           '<div style="flex:1;min-width:140px;display:flex;flex-direction:column;gap:5px;">' +
             '<label style="font-size:0.8rem;color:var(--ink-400);">اسم اللون</label>' +
             '<input type="text" placeholder="مثال: أسود" value="' + escapeHtml(c.name || "") + '" data-color-idx="' + idx + '" class="color-name-input" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;background:#fff;">' +
           '</div>' +
+          
           '<div style="display:flex;flex-direction:column;gap:5px;align-items:center;">' +
             '<label style="font-size:0.8rem;color:var(--ink-400);">الدرجة</label>' +
             '<input type="color" value="' + escapeHtml(/^#[0-9a-fA-F]{6}$/.test(c.hex || "") ? c.hex : "#7c9a4c") + '" data-color-idx="' + idx + '" class="color-hex-input" style="width:38px;height:38px;padding:0;border:none;cursor:pointer;border-radius:50%;">' +
           '</div>' +
+          
           '<div class="image-upload" style="margin:0;display:flex;flex-direction:column;gap:5px;min-width:120px;">' +
             '<label style="font-size:0.8rem;color:var(--ink-400);">صورة اللون (اختياري)</label>' +
             '<div style="display:flex;align-items:center;gap:10px;">' +
@@ -553,9 +623,11 @@ function renderColorsList() {
               '<input type="file" accept="image/*" class="color-image-input" data-color-idx="' + idx + '" style="width:90px;font-size:0.8rem;">' +
             '</div>' +
           '</div>' +
+          
           '<div style="display:flex;align-items:flex-end;height:100%;padding-bottom:2px;">' +
             '<button type="button" class="btn-icon btn-sm" style="color:var(--danger);background:#fee2e2;border-radius:6px;width:38px;height:38px;" title="حذف اللون" onclick="removeColorRow(' + idx + ')">' + iconSvg("trash") + '</button>' +
           '</div>' +
+          
         '</div>'
       );
     }).join("");
@@ -641,13 +713,13 @@ function renderInventoryGrid() {
   const colKeys = sizes.length ? sizes : [null];
 
   let html = '<table style="width:100%;border-collapse:collapse;font-size:.85rem;">';
-  html += "<tr><th style='text-align:right;padding:6px;'></th>" + colKeys.map(function (s) { return "<th style='padding:6px;'>" + escapeHtml(s || "الكمية") + "</th>"; }).join("") + "</tr>";
+  html += "<tr><th style='text-align:right;padding:6px;width:1%;white-space:nowrap;'></th>" + colKeys.map(function (s) { return "<th style='padding:6px;text-align:center;'>" + escapeHtml(s || "الكمية") + "</th>"; }).join("") + "</tr>";
   rowKeys.forEach(function (color) {
-    html += "<tr><td style='padding:6px;font-weight:600;'>" + escapeHtml(color || "الكمية") + "</td>";
+    html += "<tr><td style='padding:6px;font-weight:600;text-align:right;width:1%;white-space:nowrap;'>" + escapeHtml(color || "الكمية") + "</td>";
     colKeys.forEach(function (size) {
       const key = inventoryKeyFor(color, size);
       const val = Number(pendingInventory[key]) || 0;
-      html += "<td style='padding:4px;'><input type='number' min='0' value='" + (Number(val) || 0) + "' data-inv-key='" + escapeHtml(key) + "' class='inventory-cell' style='width:70px;padding:6px;'></td>";
+      html += "<td style='padding:4px;text-align:center;'><input type='number' min='0' value='" + (Number(val) || 0) + "' data-inv-key='" + escapeHtml(key) + "' class='inventory-cell' style='width:70px;padding:6px;'></td>";
     });
     html += "</tr>";
   });
@@ -771,6 +843,7 @@ function openProductModal(productId) {
     document.getElementById("productName").value = p.name;
     document.getElementById("productDescription").value = p.description || "";
     document.getElementById("productPrice").value = p.price;
+    if (document.getElementById("productOldPrice")) document.getElementById("productOldPrice").value = p.oldPrice || "";
     document.getElementById("productCategorySelect").value = p.categoryId;
     document.getElementById("productStock").value = p.stock;
     
@@ -816,6 +889,15 @@ function closeProductModal() {
 
 async function saveProductForm(e) {
   e.preventDefault();
+
+  const _oldPriceEl = document.getElementById("productOldPrice");
+  const _oldPriceVal = _oldPriceEl ? (Number(_oldPriceEl.value) || 0) : 0;
+  const _newPriceVal = Number(document.getElementById("productPrice").value) || 0;
+  const _offerOn = document.getElementById("productOffer") ? document.getElementById("productOffer").checked : false;
+  if (_offerOn && _oldPriceVal && _oldPriceVal <= _newPriceVal) {
+    showToast("السعر القديم يجب أن يكون أكبر من السعر الجديد", "error");
+    return;
+  }
 
   const cleanColors = pendingColors
     .filter(function (c) { return (c.name && c.name.trim()) || c.image || c.hex !== "#7c9a4c"; })
@@ -888,6 +970,7 @@ async function saveProductForm(e) {
     name: document.getElementById("productName").value.trim(),
     description: document.getElementById("productDescription").value.trim(),
     price: Number(document.getElementById("productPrice").value) || 0,
+    oldPrice: _oldPriceVal,
     categoryId: document.getElementById("productCategorySelect").value,
     stock: totalStock,
     available: document.getElementById("productAvailable").checked,
@@ -919,7 +1002,7 @@ async function saveProductForm(e) {
 
   const persisted = await Store.whenProductsSaved();
   if (persisted === false) {
-    showToast("لم يُحفظ المنتج على الخادم. النافذة مفتوحة لإعادة المحاولة.", "error");
+    showToast("لم يُحفظ المنتج على الخادم (تحقق من الاتصال وصلاحيات Firebase). النافذة مفتوحة لإعادة المحاولة.", "error");
     return;
   }
   showToast(editingProductId ? "تم تحديث المنتج" : "تمت إضافة المنتج", "success");
@@ -1288,7 +1371,7 @@ window.changeOrderStatus = async function(orderId, selectElement) {
     if (touched.size > 0) {
       const ok = await Store.saveProducts(products);
       if (ok === false) {
-        showToast("تعذّر حفظ خصم المخزون على الخادم. لم يتغيّر الطلب.", "error");
+        showToast("تعذّر حفظ خصم المخزون على الخادم. لم يتغيّر الطلب. حدّث الصفحة وأعد المحاولة.", "error");
         selectElement.value = previousStatus;
         return;
       }
@@ -1297,9 +1380,9 @@ window.changeOrderStatus = async function(orderId, selectElement) {
 
     const saved = await updateOrderInFirebase(order.id, { status: "prepared", stockDeducted: true });
     if (!saved) {
-      showToast("تم خصم المخزون لكن تعذّر تحديث حالة الطلب على الخادم.", "error");
+      showToast("تم خصم المخزون لكن تعذّر تحديث حالة الطلب على الخادم. حدّث الصفحة وتحقق من الطلب.", "error");
     } else if (notDeducted.length) {
-      showToast("تم التجهيز، لكن لم تُخصم كمية: " + notDeducted.join("، "), "error");
+      showToast("تم التجهيز، لكن لم تُخصم كمية: " + notDeducted.join("، ") + " (المخزون غير كافٍ أو المنتج محذوف).", "error");
     } else {
       showToast("تم تجهيز الطلب وخصم المخزون بنجاح!", "success");
     }
@@ -1373,9 +1456,10 @@ function renderOrdersTable() {
 
     const cust = o.customer || {};
     let customerHtml = '<span style="color:var(--ink-400);font-size:.85rem;">بدون بيانات توصيل</span>';
-    if (cust.phone || cust.gov) {
+    if (cust.phone || cust.gov || cust.name) {
       customerHtml = 
         '<div style="font-size:.85rem;line-height:1.4;white-space:nowrap;">' +
+          (cust.name ? '<strong style="color:var(--primary);display:block;margin-bottom:3px;font-size:0.92rem;">👤 ' + escapeHtml(cust.name) + '</strong>' : '') +
           (cust.phone ? '<a href="tel:' + escapeHtml(String(cust.phone).replace(/[^0-9+]/g, "")) + '" style="font-weight:700;color:var(--olive-700);text-decoration:underline;" dir="ltr">' + escapeHtml(cust.phone) + '</a><br>' : '') +
           '<span>' + escapeHtml(cust.gov || "") + (cust.area ? ' — ' + escapeHtml(cust.area) : '') + '</span>' +
           (cust.landmark && cust.landmark !== "لا يوجد" ? '<br><small style="color:var(--ink-500);">' + escapeHtml(cust.landmark) + '</small>' : '') +
@@ -1422,6 +1506,8 @@ function fillSettingsForm() {
   form.instagram.value = s.instagram || "";
   if (form.tiktok) form.tiktok.value = s.tiktok || "";
   form.phone.value = s.phone || "";
+  if (form.phone2) form.phone2.value = s.phone2 || "";
+  if (form.mapUrl) form.mapUrl.value = s.mapUrl || "";
   form.address.value = s.address || "";
   form.workingHours.value = s.workingHours || "";
   form.deliveryInfo.value = s.deliveryInfo || "";
@@ -1434,6 +1520,12 @@ function wireSettingsForm() {
   form.addEventListener("submit", function (e) {
     e.preventDefault();
 
+    const mapUrlVal = form.mapUrl ? form.mapUrl.value.trim() : "";
+    if (mapUrlVal && !safeMapUrl(mapUrlVal)) {
+      showToast("رابط الخرائط يجب أن يبدأ بـ https://", "error");
+      return;
+    }
+
     const patch = {
       storeName: form.storeName.value.trim(),
       storeTagline: form.storeTagline.value.trim(),
@@ -1442,6 +1534,8 @@ function wireSettingsForm() {
       instagram: form.instagram.value.trim(),
       tiktok: form.tiktok ? form.tiktok.value.trim() : Store.getSettings().tiktok || "",
       phone: form.phone.value.trim(),
+      phone2: form.phone2 ? form.phone2.value.trim() : (Store.getSettings().phone2 || ""),
+      mapUrl: mapUrlVal,
       address: form.address.value.trim(),
       workingHours: form.workingHours.value.trim(),
       deliveryInfo: form.deliveryInfo.value.trim(),

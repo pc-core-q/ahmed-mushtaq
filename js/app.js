@@ -291,7 +291,7 @@ function initGlobalSearch() {
                 <div class="search-item-img">${img}</div>
                 <div class="search-item-info">
                     <h4>${escapeHtml(p.name)}</h4>
-                    <span>${formatPrice(p.price)}</span>
+                    <span>${priceHtml(p)}</span>
                 </div>
             </a>
         `;
@@ -322,6 +322,8 @@ function renderFooter() {
     storeName: escapeHtml(rawSettings.storeName || "متجرك الإلكتروني"),
     storeDescription: escapeHtml(rawSettings.storeDescription || "تجربة تسوق بسيطة، واضحة ومباشرة."),
     phone: escapeHtml(rawSettings.phone || ""),
+    phone2: escapeHtml(rawSettings.phone2 || ""),
+    mapUrl: escapeHtml(safeMapUrl(rawSettings.mapUrl)),
     whatsapp: rawSettings.whatsapp || "",
     instagram: escapeHtml(rawSettings.instagram ? safeUrl(rawSettings.instagram) : ""),
     tiktok: escapeHtml(rawSettings.tiktok ? safeUrl(rawSettings.tiktok) : ""),
@@ -343,10 +345,11 @@ function renderFooter() {
           '<div><h4>الأقسام</h4><ul>' + (catLinks || '<li>لا توجد أقسام بعد</li>') + '</ul></div>' +
           '<div><h4>تواصل معنا</h4><ul>' +
             (settings.phone ? '<li><a href="tel:' + settings.phone + '">' + settings.phone + '</a></li>' : '') +
+            (settings.phone2 ? '<li><a href="tel:' + settings.phone2 + '">' + settings.phone2 + '</a></li>' : '') +
             (settings.whatsapp ? '<li><a href="https://wa.me/' + whatsappDigitsOnly(settings.whatsapp) + '" target="_blank" rel="noopener">واتساب</a></li>' : '') +
             (settings.instagram ? '<li><a href="' + settings.instagram + '" target="_blank" rel="noopener">انستغرام</a></li>' : '') +
             (settings.tiktok ? '<li><a href="' + settings.tiktok + '" target="_blank" rel="noopener">تيك توك</a></li>' : '') +
-            (settings.address ? '<li>' + settings.address + '</li>' : '') +
+            (settings.address ? '<li>' + (settings.mapUrl ? '<a href="' + settings.mapUrl + '" target="_blank" rel="noopener">' + settings.address + '</a>' : settings.address) + '</li>' : '') +
           '</ul></div>' +
         '</div>' +
         '<div class="footer-bottom" style="margin-top: 25px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.08); text-align: center; font-size: 0.82rem; color: rgba(255,255,255,0.6); display: flex; flex-direction: column; gap: 6px; align-items: center;">' +

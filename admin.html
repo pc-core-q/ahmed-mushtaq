@@ -4,17 +4,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta charset="UTF-8">
   <title>لوحة تحكم الأدمن | كوزمتك احمد مشتاق</title>
-<link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=64">
-<link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=64">
-<link rel="apple-touch-icon" href="assets/logo/logo.png?v=64">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=64">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=68">
+<link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=68">
+<link rel="apple-touch-icon" href="assets/logo/logo.png?v=68">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=68">
     <!-- Arabic UI font (same on every page; non-blocking) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=63">
-  <link rel="stylesheet" href="css/refresh.css?v=63">
+<link rel="stylesheet" href="css/style.css?v=70">
+  <link rel="stylesheet" href="css/refresh.css?v=68">
 </head>
 <body>
 
@@ -173,7 +173,9 @@
           <div class="field"><label>رابط انستغرام</label><input name="instagram" placeholder="https://instagram.com/yourstore"></div>
           <div class="field"><label>رابط تيك توك</label><input name="tiktok" placeholder="https://www.tiktok.com/@yourstore"></div>
           <div class="field"><label>رقم الهاتف</label><input name="phone"></div>
-          <div class="field"><label>العنوان</label><input name="address"></div>
+          <div class="field"><label>رقم هاتف ثاني (اختياري)</label><input name="phone2"></div>
+          <div class="field"><label>العنوان</label><input name="address" placeholder="مثال: كربلاء - حي الأطباء"></div>
+          <div class="field"><label>رابط الموقع على الخرائط (اختياري)</label><input name="mapUrl" dir="ltr" placeholder="https://maps.app.goo.gl/..."><div class="field-hint">افتح المكان في خرائط جوجل ← مشاركة ← نسخ الرابط، ثم الصقه هنا. يصبح العنوان قابلاً للضغط ويفتح الخرائط مباشرة.</div></div>
           <div class="field"><label>ساعات العمل</label><input name="workingHours"></div>
           <div class="field"><label>معلومات التوصيل</label><textarea name="deliveryInfo"></textarea></div>
           <div class="field"><label>رمز العملة</label><input name="currencySymbol"></div>
@@ -225,6 +227,7 @@
       <div class="field"><label>اسم المنتج</label><input type="text" id="productName" required></div>
       <div class="field"><label>الوصف</label><textarea id="productDescription"></textarea></div>
       <div class="field"><label>السعر (د.ع)</label><input type="number" id="productPrice" min="0" required></div>
+      <div class="field"><label>السعر القديم قبل الخصم (اختياري)</label><input type="number" id="productOldPrice" min="0" placeholder="يظهر مشطوباً بجانب السعر عند تفعيل «عرض خاص»"></div>
       <div class="field"><label>القسم</label><select id="productCategorySelect" required></select></div>
       
       <div class="field">
@@ -322,19 +325,54 @@
   </div>
 </div>
 
+<!-- ============ Update notice modal ============ -->
+<div class="modal-overlay" id="updateModal" role="dialog" aria-modal="true" aria-labelledby="updateModalTitle">
+  <div class="modal-card update-card">
+    <div class="modal-head">
+      <h3 id="updateModalTitle">تم تحديث موقعك</h3>
+      <button class="close-modal" id="closeUpdateModal" aria-label="إغلاق"></button>
+    </div>
+    <p class="update-intro">يسعدنا إبلاغك بأنه تم تحديث الموقع وإضافة مميزات جديدة تساعدك في إدارة متجرك بشكل أفضل:</p>
+    <ul class="update-list">
+      <li>
+        <span class="update-num">1</span>
+        <div>
+          <strong>عرض السعر قبل وبعد التخفيض</strong>
+          <p>عند تفعيل «عرض» لأي منتج، أدخل «السعر القديم» ليظهر للزبون مشطوباً بجانب السعر الجديد.</p>
+        </div>
+      </li>
+      <li>
+        <span class="update-num">2</span>
+        <div>
+          <strong>ربط الموقع بخرائط جوجل</strong>
+          <p>من «الإعدادات» الصق رابط موقعك على الخرائط، ليصبح العنوان قابلاً للضغط ويفتح الخرائط مباشرة.</p>
+        </div>
+      </li>
+      <li>
+        <span class="update-num">3</span>
+        <div>
+          <strong>إضافة رقم هاتف ثانٍ</strong>
+          <p>يمكنك الآن إضافة رقم هاتف إضافي من «الإعدادات» ليظهر مع بيانات التواصل في موقعك.</p>
+        </div>
+      </li>
+    </ul>
+    <button type="button" class="btn btn-primary btn-block" id="updateModalOk">حسناً، فهمت</button>
+  </div>
+</div>
+
 <!-- مكتبة SheetJS لقراءة وتفكيك ملفات Excel و CSV مباشرة في المتصفح -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
-<script src="js/config.js?v=62"></script>
-<script src="js/icons.js?v=62"></script>
+<script src="js/config.js?v=68"></script>
+<script src="js/icons.js?v=68"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<script src="js/store.js?v=62"></script>
-<script src="js/whatsapp.js?v=62"></script>
-<script src="js/app.js?v=62"></script>
-<script src="js/auth.js?v=62"></script>
-<script src="js/admin.js?v=62"></script>
+<script src="js/store.js?v=68"></script>
+<script src="js/whatsapp.js?v=68"></script>
+<script src="js/app.js?v=68"></script>
+<script src="js/auth.js?v=68"></script>
+<script src="js/admin.js?v=70"></script>
 <script>
   // تعبئة الأيقونات الثابتة
   document.querySelector(".admin-nav").innerHTML = document.querySelector(".admin-nav").innerHTML

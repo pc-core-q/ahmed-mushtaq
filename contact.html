@@ -4,10 +4,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta charset="UTF-8">
 <title>تواصل معنا | كوزمتك احمد مشتاق</title>
-<link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=64">
-<link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=64">
-<link rel="apple-touch-icon" href="assets/logo/logo.png?v=64">
-<link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=64">
+<link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=68">
+<link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=68">
+<link rel="apple-touch-icon" href="assets/logo/logo.png?v=68">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=68">
   <!-- Arabic UI font (same on every page; non-blocking) -->
   <!-- عدّل رابط قاعدة البيانات لكل عميل ليطابق config.js -->
   <link rel="preconnect" href="https://test3-2a6de-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap"></noscript>
-<link rel="stylesheet" href="css/style.css?v=62">
-  <link rel="stylesheet" href="css/refresh.css?v=62">
+<link rel="stylesheet" href="css/style.css?v=68">
+  <link rel="stylesheet" href="css/refresh.css?v=68">
 </head>
 <body>
 
@@ -51,11 +51,11 @@
 <div id="site-footer"></div>
 
 <!-- سكربتات مؤجلة (defer): لا تحجب الرسم. القراءة من Firebase عبر REST داخل store.js (بدون SDK) -->
-<script src="js/config.js?v=62" defer></script>
-<script src="js/icons.js?v=62" defer></script>
-<script src="js/store.js?v=62" defer></script>
-<script src="js/whatsapp.js?v=62" defer></script>
-<script src="js/app.js?v=62" defer></script>
+<script src="js/config.js?v=68" defer></script>
+<script src="js/icons.js?v=68" defer></script>
+<script src="js/store.js?v=68" defer></script>
+<script src="js/whatsapp.js?v=68" defer></script>
+<script src="js/app.js?v=68" defer></script>
 <script>
   /* تُستدعى عند التحميل وعند وصول الإعدادات من Firebase (كانت تعرض "لم يتم إعداد بيانات التواصل" لأول زائر ولا تتحدّث) */
   function renderContactPage() {
@@ -72,7 +72,11 @@
       label: "تابعنا"
     });
     if (s.phone) cards.push({ icon: "phone", title: "الهاتف", desc: s.phone, link: "tel:" + String(s.phone).replace(/[^0-9+]/g, ""), label: "اتصال مباشر" });
-    if (s.address) cards.push({ icon: "home", title: "الموقع", desc: s.address, link: null, label: null });
+    if (s.phone2) cards.push({ icon: "phone", title: "هاتف ثانٍ", desc: s.phone2, link: "tel:" + String(s.phone2).replace(/[^0-9+]/g, ""), label: "اتصال مباشر" });
+    if (s.address) {
+      const mapLink = safeMapUrl(s.mapUrl);
+      cards.push({ icon: "home", title: "الموقع", desc: s.address, descLink: mapLink || null, link: mapLink || null, label: mapLink ? "افتح في الخرائط" : null });
+    }
 
     document.getElementById("contactCards").innerHTML = cards.length ? cards.map(function (c) {
       // قراءة الأيقونة المخصصة أو الأيقونة الافتراضية
@@ -81,7 +85,7 @@
       return '<div class="feature-card">' +
         '<div class="icon">' + iconHtml + "</div>" +
         "<h3>" + c.title + "</h3>" +
-        "<p>" + escapeHtml(c.desc) + "</p>" +
+        "<p>" + (c.descLink ? '<a href="' + escapeHtml(c.descLink) + '" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">' + escapeHtml(c.desc) + "</a>" : escapeHtml(c.desc)) + "</p>" +
         (c.link ? '<a href="' + escapeHtml(c.link) + '" target="_blank" rel="noopener" class="btn btn-outline btn-sm">' + c.label + "</a>" : "") +
       "</div>";
     }).join("") : '<div class="empty-state"><p>لم يتم إعداد بيانات التواصل بعد من لوحة التحكم.</p></div>';

@@ -89,7 +89,7 @@ function renderProductCard(product) {
         '<h3 class="product-name"><a href="product.html?id=' + encodeURIComponent(productId) + '" data-product-link="1">' + escapeHtml(product.name) + "</a></h3>" +
         colorsHtml +
         '<div class="product-foot">' +
-          '<span class="price">' + formatPrice(product.price) + "</span>" +
+          '<span class="price">' + priceHtml(product) + "</span>" +
           '<div class="product-actions">' +
             '<button class="btn btn-primary" ' + (outOfStock ? "disabled" : "") +
               ' title="' + actionTitle + '"' +
@@ -262,6 +262,7 @@ async function queryAlgoliaDirect(pageToFetch, cfg) {
       objectID: h.objectID || h.id,
       name: h.name,
       price: h.price,
+      oldPrice: h.oldPrice || 0,
       categoryId: h.categoryId,
       image: h.image,
       colors: h.colors || [],
@@ -636,7 +637,7 @@ function productNotFoundHtml() {
 
 // بصمة الحقول التي تؤثر على ما يراه الزائر (للمقارنة بين النسخة المحلية والنسخة الحديثة)
 function productDetailSignature(p) {
-  return JSON.stringify([p.name, p.price, p.available, p.stock, p.inventory, p.image, p.images, p.colors, p.sizes, p.variants, p.description, p.categoryId]);
+  return JSON.stringify([p.name, p.price, p.oldPrice, p.isOffer, p.available, p.stock, p.inventory, p.image, p.images, p.colors, p.sizes, p.variants, p.description, p.categoryId]);
 }
 
 // عند وصول مزامنة الأقسام نحدّث أسماء القسم فقط (لا نعيد رسم الصفحة كي لا نمسح اختيار اللون/المقاس/الكمية)
@@ -782,7 +783,7 @@ function renderProductDetail(mount, product) {
         '<span class="product-cat" data-cat-label="1">' + escapeHtml(Store.getCategoryName(product.categoryId)) + "</span>" +
         "<h1>" + escapeHtml(product.name) + "</h1>" +
         '<div class="stock-line" id="stockLine"><span class="dot' + (initiallyOutOfStock ? " dot-out" : "") + '"></span><span id="stockLineText">' + (initiallyOutOfStock ? "غير متوفر حاليًا" : "متوفر حاليًا") + "</span></div>" +
-        '<div class="detail-price">' + formatPrice(product.price) + "</div>" +
+        '<div class="detail-price">' + priceHtml(product) + "</div>" +
         '<div id="descWrapper" style="position:relative; overflow:hidden; max-height:80px; transition: max-height 0.4s ease;">' +
           '<p style="margin:0; white-space: pre-wrap;">' + escapeHtml(product.description || "") + '</p>' +
           '<div id="descFade" style="position:absolute; bottom:0; left:0; right:0; height:40px; background:linear-gradient(transparent, var(--cream));"></div>' +

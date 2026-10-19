@@ -289,6 +289,23 @@ async function atest(name, fn) {
     assert.strictEqual(S.getAds().length, 1);
   });
 
+  await atest("السعر القديم: يظهر في الفهرس فقط عند العرض وعندما يكون أكبر من الجديد؛ والروابط غير الآمنة مرفوضة", async () => {
+    const e = fbEnv({ requests: [], bytes: 0, v: 1, items: [] });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "js", "whatsapp.js"), "utf8"), e, { filename: "whatsapp.js" });
+    const rec = vm.runInContext("buildIndexRecord", e), hyd = vm.runInContext("hydrateIndexRecord", e);
+    assert.strictEqual(rec({ id: "a", name: "x", price: 8000, oldPrice: 10000, isOffer: true }).oldPrice, 10000);
+    assert.strictEqual(rec({ id: "a", name: "x", price: 8000, oldPrice: 10000, isOffer: false }).oldPrice, undefined);
+    assert.strictEqual(rec({ id: "a", name: "x", price: 8000, oldPrice: 5000, isOffer: true }).oldPrice, undefined);
+    assert.strictEqual(hyd(rec({ id: "a", name: "x", price: 8000, oldPrice: 10000, isOffer: true })).oldPrice, 10000);
+    const ph = vm.runInContext("priceHtml", e);
+    assert.ok(ph({ price: 8000, oldPrice: 10000, isOffer: true }).indexOf("price-old") > -1);
+    assert.ok(ph({ price: 8000, oldPrice: 10000, isOffer: false }).indexOf("price-old") === -1);
+    const sm = vm.runInContext("safeMapUrl", e);
+    assert.strictEqual(sm("https://maps.app.goo.gl/abc123"), "https://maps.app.goo.gl/abc123");
+    assert.strictEqual(sm("javascript:alert(1)"), "");
+    assert.strictEqual(sm("//evil.com"), "");
+  });
+
   console.log("\nالنتيجة: " + passed + " نجح، " + failed + " فشل");
   process.exit(failed ? 1 : 0);
 })();

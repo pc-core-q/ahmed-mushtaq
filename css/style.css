@@ -1806,3 +1806,17 @@ td.row-actions>*+*{margin-inline-start:6px}
 @media(prefers-reduced-motion:reduce){
   *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
 }
+
+/* عرض السعر الجديد مع القديم المشطوب داخل بطاقات المنتجات */
+.product-foot .price{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+.product-foot .price-old{margin-inline-start:0}
+.detail-price .price-old{font-size:.55em;margin-inline-start:12px}
+
+/* إشعار تحديث الموقع في لوحة الأدمن */
+.update-card{width:100%!important;max-width:min(520px,94vw)!important;max-height:90vh;overflow-y:auto}
+.update-intro{margin:0 0 16px;color:var(--text-2);line-height:1.8}
+.update-list{list-style:none;margin:0 0 20px;padding:0;display:grid;gap:12px}
+.update-list li{display:flex;gap:12px;align-items:flex-start;padding:14px;background:var(--accent-soft);border:1px solid var(--border);border-radius:var(--radius-sm)}
+.update-num{flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--primary);color:var(--on-primary);font-weight:700;font-size:.95rem}
+.update-list strong{display:block;color:var(--primary);margin-bottom:4px}
+.update-list p{margin:0;color:var(--text-2);font-size:.92rem;line-height:1.7}
