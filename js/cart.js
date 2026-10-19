@@ -1,7 +1,7 @@
 /* ==========================================================================
    cart.js
    منطق صفحة السلة (cart.html) فقط.
-   تم التحديث: حذف المنتج تلقائياً عند إنقاص الكمية لصفر + إبراز زر الإزالة.
+   تم التحديث: توحيد مقاسات الصور لمنع استهلاك ImageKit + إلغاء الرسم المزدوج.
    ========================================================================== */
 
 function cartLineMediaUrl(line, product) {
@@ -25,9 +25,9 @@ function cartLineVariantLabel(line) {
 
 function cartLineHtml(line, product, unavailable) {
   const mediaUrl = cartLineMediaUrl(line, product);
-  const optimizedMediaUrl = typeof window.getIkUrl === 'function' ? window.getIkUrl(mediaUrl, 150, 70) : mediaUrl;
+  const optimizedMediaUrl = typeof window.getIkUrl === 'function' ? window.getIkUrl(mediaUrl, 160, 70) : mediaUrl;
   const media = optimizedMediaUrl
-    ? '<img src="' + escapeHtml(optimizedMediaUrl) + '" alt="' + escapeHtml(product.name) + '" width="150" height="150" loading="lazy" decoding="async">'
+    ? '<img src="' + escapeHtml(optimizedMediaUrl) + '" alt="' + escapeHtml(product.name) + '" width="150" height="150" loading="lazy" decoding="async" style="background:#f0ede8;">'
     : '<div class="placeholder-icon-wrap">' + iconSvg(
         (Store.getCategories().find(function (c) { return c.id === product.categoryId; }) || {}).icon || "box"
       ) + "</div>";
@@ -158,8 +158,8 @@ function stepCartQty(itemKey, delta) {
     return;
   }
 
+  // Store.setQty تطلق تلقائياً حدث cart:updated الذي يعيد الرسم
   Store.setQty(itemKey, next);
-  renderCartPage();
 }
 
 function setCartQty(itemKey, value) {
@@ -183,12 +183,10 @@ function setCartQty(itemKey, value) {
   }
   
   Store.setQty(itemKey, qty);
-  renderCartPage();
 }
 
 function removeCartLine(itemKey) {
   Store.removeFromCart(itemKey);
-  renderCartPage();
   if (typeof showToast === "function") showToast("تمت إزالة المنتج من السلة", "success");
 }
 
@@ -203,14 +201,13 @@ async function initCartPage() {
       return;
     }
     orderCartViaWhatsApp();
-    setTimeout(renderCartPage, 300);
   });
 
   const lines = Store.getCart();
   if (lines.length) {
     cartRefreshing = true;
-    renderCartPage();                       // عرض فوري من الكاش (Skeleton للمنتجات غير المحفوظة)
-    // نُحدّث كل منتج في السلة من Firebase: السعر/المخزون الحاليان (النسخة المحلية قد تكون قديمة)
+    renderCartPage();                       // عرض فوري من الكاش
+    // تحديث كل منتج في السلة من الخادم للتأكد من أحدث سعر ومخزون
     const ids = Array.from(new Set(lines.map(function (l) { return l.productId; })));
     try {
       await Promise.all(ids.map(function (id) { return Store.loadProductById(id, true); }));

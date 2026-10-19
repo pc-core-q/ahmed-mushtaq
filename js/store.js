@@ -1,13 +1,14 @@
 /* ==========================================================================
    store.js — طبقة البيانات المركزية للقالب (localStorage + Firebase Realtime DB)
    مع دعم الفهرس المصغر (Mini-Index) للمتاجر حتى 2000 منتج + المزامنة السحابية.
+   تم التحديث: فحص خفيف موحد للأقسام والإعلانات ws_meta_v ومزامنة لحظية كل 20 ثانية.
    ========================================================================== */
 
 const META_CACHE_MS = 60 * 1000;       // فحص خفيف دوري
 const QUERY_CACHE_MS = 15 * 1000;
-const REFRESH_MS = 30 * 1000;
-const INDEX_CHECK_MS = 15 * 1000;      // فحص إصدار الفهرس فوراً
-const META_PULL_MS = 15 * 1000;       // فحص الأقسام والإعلانات فوراً
+const REFRESH_MS = 60 * 1000;
+const INDEX_CHECK_MS = 60 * 1000;      // فحص إصدار الفهرس كل 20 ثانية
+const META_PULL_MS = 60 * 1000;        // فحص إصدار الأقسام والإعلانات كل 20 ثانية
 const PRODUCT_CACHE_LIMIT = 5000;
 const FETCH_TIMEOUT_MS = 15000;
 
@@ -344,9 +345,24 @@ async function _pullFromFirebase(force) {
   const now = Date.now();
   if (!force && lastSync && (now - lastSync) < META_PULL_MS) return;
 
-  const snapshotBefore = [DB_KEYS.categories, DB_KEYS.settings, DB_KEYS.ads].map(function (k) { return LS.get(k); }).join("\u0001");
-
   try {
+    let remoteMetaV = null;
+    try {
+      remoteMetaV = await restGet("ws_meta_v", "", 8000);
+    } catch (e) {}
+
+    const localMetaV = LS.get("ws_meta_v");
+    const hasLocalCats = !!LS.get(DB_KEYS.categories);
+
+    // إذا لم يكن الفحص إجبارياً، والبيانات موجودة محلياً، ولم يتغير رقم النسخة:
+    // نحدث وقت الفحص ونخرج فوراً بدون تنزيل أي بايت إضافي
+    if (!force && hasLocalCats && remoteMetaV !== null && remoteMetaV !== undefined && String(localMetaV) === String(remoteMetaV)) {
+      LS.set("last_meta_pull_time", String(now));
+      return;
+    }
+
+    const snapshotBefore = [DB_KEYS.categories, DB_KEYS.settings, DB_KEYS.ads].map(function (k) { return LS.get(k); }).join("\u0001");
+
     const results = await Promise.all([
       fetchNode(DB_KEYS.categories),
       fetchNode(DB_KEYS.settings),
@@ -358,21 +374,13 @@ async function _pullFromFirebase(force) {
     LS.set(DB_KEYS.ads, JSON.stringify(firebaseValueToArray(rawAds)));
     if (settings !== null) LS.set(DB_KEYS.settings, JSON.stringify(settings || {}));
 
-    if (sessionStorage.getItem(DB_KEYS.session) === "1" && database) {
-      try {
-        const ordersRaw = await fetchNode(DB_KEYS.orders);
-        if (ordersRaw !== null) {
-          const ordersList = firebaseValueToArray(ordersRaw);
-          ordersList.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-          LS.set(DB_KEYS.orders, JSON.stringify(ordersList));
-        }
-      } catch (e) { console.error("Firebase orders pull error:", e); }
+    if (remoteMetaV !== null && remoteMetaV !== undefined) {
+      LS.set("ws_meta_v", String(remoteMetaV));
     }
-
     LS.set("last_meta_pull_time", String(now));
 
     const snapshotAfter = [DB_KEYS.categories, DB_KEYS.settings, DB_KEYS.ads].map(function (k) { return LS.get(k); }).join("\u0001");
-    if (snapshotAfter !== snapshotBefore || !lastSync || force) emitStoreEvent("store:synced");
+    if (snapshotAfter !== snapshotBefore || !lastSync) emitStoreEvent("store:synced");
   } catch (e) {
     console.error("Firebase metadata pull error:", e);
     emitStoreEvent("store:sync-error");
@@ -405,7 +413,8 @@ function seedIfNeeded() {
       "last_meta_pull_time",
       "ws_products_all_time",
       DB_KEYS.productsCount,
-      IDX_ITEMS, IDX_V, IDX_CHECKED
+      IDX_ITEMS, IDX_V, IDX_CHECKED,
+      "ws_meta_v"
     ];
     LS.keys().forEach(function (key) {
       if (key && (key.indexOf("ws_products_") === 0 || keysToRemove.indexOf(key) !== -1)) LS.remove(key);
@@ -445,7 +454,7 @@ function seedIfNeeded() {
 }
 
 seedIfNeeded();
-pullFromFirebase(true);
+pullFromFirebase();
 
 function inventoryKey(color, size) {
   return (color || "_") + "||" + (size || "_");
@@ -633,6 +642,14 @@ const Store = {
   async ensureIndexFresh(force) {
     if (!firebaseEnabled) return;
     return dedupe("indexFresh", async () => {
+      const now = Date.now();
+      const lastCheck = Number(LS.get(IDX_CHECKED) || 0);
+
+      // إذا لم يكن الفحص إجبارياً والكاش موجود وفحصنا خلال فترة التهدئة، نخرج فوراً
+      if (!force && this.hasIndexLocal() && (now - lastCheck) < INDEX_CHECK_MS) {
+        return;
+      }
+
       let remoteV;
       try { 
         remoteV = await restGet(DB_KEYS.index + "/v", "", 8000); 
@@ -647,10 +664,13 @@ const Store = {
         return;
       }
 
+      // إذا كانت النسخة السحابية مطابقة للمحلية، نحدث وقت الفحص ونخرج فوراً بدون طلب الفهرس
       if (!force && this.hasIndexLocal() && String(LS.get(IDX_V)) === String(remoteV)) { 
+        LS.set(IDX_CHECKED, String(now));
         return; 
       }
 
+      // تحميل الفهرس فقط عند تغير رقم النسخة أو عدم وجوده
       const items = await restGet(DB_KEYS.index + "/items", "", 30000);
       const freshItems = firebaseValueToArray(items);
       storeIndexLocal({ v: remoteV, items: freshItems });
@@ -681,8 +701,6 @@ const Store = {
   saveCategories(list) {
     LS.set(DB_KEYS.categories, JSON.stringify(list));
     syncNodeToFirebase(DB_KEYS.categories, list);
-    // تحديث رقم الفهرس لإشعار الزوار بتغير الأقسام فوراً
-    if (database) database.ref(DB_KEYS.index + "/v").set(Date.now());
   },
   addCategory(cat) {
     const list = this.getCategories();
@@ -960,7 +978,7 @@ const Store = {
       sizes: [],
       inventory: {}
     }, prod);
-    
+
     if (!item.id) item.id = generatedId;
     item.objectID = item.id;
 
@@ -1057,12 +1075,12 @@ const Store = {
 
   getOrders() { return firebaseValueToArray(parseJSON(LS.get(DB_KEYS.orders), [])); },
 
-  async loadOrdersFromFirebase() {
+  async loadOrdersFromFirebase(limitCount = 300) {
     if (!firebaseEnabled || !database) return this.getOrders();
     try {
-      const ordersRaw = await fetchNode(DB_KEYS.orders);
-      if (ordersRaw !== null) {
-        const ordersList = firebaseValueToArray(ordersRaw);
+      const snapshot = await database.ref(DB_KEYS.orders).orderByKey().limitToLast(limitCount).once("value");
+      if (snapshot.exists()) {
+        const ordersList = firebaseValueToArray(snapshot.val());
         ordersList.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
         LS.set(DB_KEYS.orders, JSON.stringify(ordersList));
         return ordersList;
@@ -1148,6 +1166,5 @@ window.addEventListener("load", function () { setTimeout(flushPendingOrders, 300
   document.addEventListener("visibilitychange", function () { if (!document.hidden) recheck(); });
   window.addEventListener("pageshow", function (e) { if (e.persisted) recheck(); });
   window.addEventListener("online", recheck);
-// بهذا السطر (فحص كل 5 دقائق):
-setInterval(function () { if (!document.hidden) recheck(); }, 5 * 60 * 1000);
+  setInterval(function () { if (!document.hidden) recheck(); }, 60 * 1000);
 })();

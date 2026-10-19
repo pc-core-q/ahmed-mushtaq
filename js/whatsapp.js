@@ -263,6 +263,65 @@ function orderSingleProductViaWhatsApp(product, qty, selection) {
     return;
   }
   selection = selection || {};
+
+  /* إذا كانت السلة تحتوي منتجات أخرى: يُرسل المنتج الحالي + كل ما في السلة في طلب واحد */
+  const cartNow = Store.getCart();
+  if (cartNow.length) {
+    let allProducts = Store.getProducts();
+    if (!allProducts.some(function (x) { return x.id === product.id; })) allProducts = allProducts.concat([product]);
+    const orderableCart = getOrderableCartLines(cartNow, allProducts);
+    const pageKey = buildCartItemKey(product.id, selection);
+    const pageLine = {
+      itemKey: pageKey,
+      productId: product.id,
+      qty: qty,
+      color: selection.color || null,
+      size: selection.size || null,
+      variant: selection.variant || null
+    };
+    /* نفس المنتج بنفس الخيار موجود في السلة: نعتمد الكمية المختارة في الصفحة بدل تكراره */
+    const combinedLines = [pageLine].concat(orderableCart.lines.filter(function (l) { return l.itemKey !== pageKey; }));
+
+    if (combinedLines.length > 1) {
+      if (orderableCart.skipped > 0) {
+        showToast("تم استبعاد " + orderableCart.skipped + " منتج غير متوفر من السلة.");
+      }
+      showDeliveryModal(function (info) {
+        const items = combinedLines.map(function (line) {
+          const p = allProducts.find(function (pp) { return pp.id === line.productId; });
+          return p ? {
+            productId: p.id,
+            name: p.name,
+            qty: line.qty,
+            price: p.price,
+            color: line.color || null,
+            size: line.size || null,
+            variant: line.variant || null
+          } : null;
+        }).filter(Boolean);
+        const total = items.reduce(function (sum, it) { return sum + it.price * it.qty; }, 0);
+
+        Store.logOrder({
+          type: "cart",
+          customer: {
+            name: info.name || "",
+            gov: info.gov,
+            area: info.area,
+            landmark: info.landmark,
+            phone: info.phone,
+            notes: info.notes || ""
+          },
+          items: items,
+          total: total
+        });
+
+        window.open(buildCartWhatsAppLink(combinedLines, allProducts, info), "_blank");
+        Store.clearCart();
+        if (typeof window.updateCartBadge === "function") window.updateCartBadge();
+      });
+      return;
+    }
+  }
   showDeliveryModal(function(info) {
     Store.logOrder({
       type: "single",

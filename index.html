@@ -1,15 +1,27 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-V6PNECE690"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-V6PNECE690');
+</script>
+
+  
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
   <title>كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة</title>
   <meta name="description" content="تصفّح تشكيلة واسعة من المنتجات المختارة بعناية واطلب مباشرة عبر واتساب مع توصيل سريع لباب بيتك.">
-  <link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=69">
-  <link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=69">
-  <link rel="apple-touch-icon" href="assets/logo/logo.png?v=69">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=69">
+  <link rel="icon" type="image/png" sizes="192x192" href="assets/logo/logo.png?v=73">
+  <link rel="shortcut icon" type="image/png" href="assets/logo/logo.png?v=73">
+  <link rel="apple-touch-icon" href="assets/logo/logo.png?v=73">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/logo/logo.png?v=73">
 
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ahmed-mushtaq.pages.dev/">
@@ -17,13 +29,13 @@
   <meta property="og:site_name" content="كوزمتك احمد مشتاق">
   <meta property="og:title" content="كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة وثقة">
   <meta property="og:description" content="تصفّح تشكيلة واسعة من المنتجات واطلب مباشرة عبر واتساب بسهولة وسرعة.">
-  <meta property="og:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=69">
+  <meta property="og:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=73">
   <meta property="og:image:alt" content="شعار المتجر">
 
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="كوزمتك احمد مشتاق | تسوق أفضل المنتجات بسهولة وثقة">
   <meta name="twitter:description" content="تصفّح تشكيلة واسعة من المنتجات واطلب مباشرة عبر واتساب بسهولة وسرعة.">
-  <meta name="twitter:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=69">
+  <meta name="twitter:image" content="https://ahmed-mushtaq.pages.dev/assets/logo/logo.png?v=73">
 
   <link rel="preconnect" href="https://test3-2a6de-default-rtdb.europe-west1.firebasedatabase.app" crossorigin>
   <link rel="preconnect" href="https://ik.imagekit.io" crossorigin>
@@ -36,10 +48,10 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap">
   </noscript>
 
-  <link rel="stylesheet" href="css/style.css?v=69">
-  <link rel="stylesheet" href="css/refresh.css?v=69">
+  <link rel="stylesheet" href="css/style.css?v=73">
+  <link rel="stylesheet" href="css/refresh.css?v=73">
 
-  <script src="js/config.js?v=69"></script>
+  <script src="js/config.js?v=73"></script>
   <script>
   (function () {
     try {
@@ -55,14 +67,33 @@
         return "?orderBy=" + encodeURIComponent(JSON.stringify(f)) + "&equalTo=" + encodeURIComponent(JSON.stringify(v)) + "&limitToFirst=" + l;
       }
       
-      // سحب فوري سريع للأقسام والإعلانات ورقم النسخة المحدثة بالتوازي مع تحميل الصفحة
-      go("ws_categories");
-      go("ws_settings");
-      go("ws_ads");
-      go("ws_index/v");
-      go("ws_products", q("featured", true, 5));
-      go("ws_products", q("isOffer", true, 5));
-      go("ws_products", q("isNew", true, 5));
+      var now = Date.now();
+      var lastMeta = Number(localStorage.getItem("last_meta_pull_time") || 0);
+      var lastIdx = Number(localStorage.getItem("ws_index_checked") || 0);
+      var hasLocalIndex = !!localStorage.getItem("ws_index_items");
+      var hasLocalMeta = !!localStorage.getItem("ws_categories");
+
+      // إذا كانت أول زيارة (لا توجد بيانات محلياً) نسحب الأقسام والإعلانات، 
+      // أما إذا كانت مخزنة فنفحص فقط رقم النسخة الخفيف ws_meta_v كل 20 ثانية (13 بايت فقط)
+      if (!hasLocalMeta) {
+        go("ws_categories");
+        go("ws_settings");
+        go("ws_ads");
+      } else if (!lastMeta || (now - lastMeta) > 60000) {
+        go("ws_meta_v");
+      }
+
+      // فحص رقم نسخة الفهرس ws_index/v كل 20 ثانية أو عند عدم وجود الفهرس محلياً
+      if (!hasLocalIndex || !lastIdx || (now - lastIdx) > 60000) {
+        go("ws_index/v");
+      }
+
+      // استعلامات المنتجات السريعة فقط عند أول زيارة للمتجر (عدم وجود فهرس محلي)
+      if (!hasLocalIndex) {
+        go("ws_products", q("featured", true, 5));
+        go("ws_products", q("isOffer", true, 5));
+        go("ws_products", q("isNew", true, 5));
+      }
     } catch (e) {}
   })();
   </script>
@@ -91,7 +122,7 @@
         </div>
       </div>
       <div class="hero-art" id="heroPromoContainer">
-        <div class="hero-art-default"><img src="assets/logo/logo.png?v=69" alt="شعار المتجر" width="160" height="160" fetchpriority="high" decoding="async"></div>
+        <div class="hero-art-default"><img src="assets/logo/logo.png?v=73" alt="شعار المتجر" width="160" height="160" fetchpriority="high" decoding="async"></div>
       </div>
     </div>
   </section>
@@ -212,10 +243,10 @@
   
 <div id="site-footer"></div>
 
-<script src="js/icons.js?v=69" defer></script>
-<script src="js/store.js?v=69" defer></script>
-<script src="js/whatsapp.js?v=69" defer></script>
-<script src="js/app.js?v=69" defer></script>
+<script src="js/icons.js?v=73" defer></script>
+<script src="js/store.js?v=73" defer></script>
+<script src="js/whatsapp.js?v=74" defer></script>
+<script src="js/app.js?v=73" defer></script>
 <script>
   var slideInterval = null;
   var HOME_SECTIONS = [
@@ -231,7 +262,7 @@
       var imgUrl = window.getIkUrl(product.image, 600, 80);
       return '<img src="' + escapeHtml(imgUrl) + '" ' +
              'alt="' + escapeHtml(product.name || "") + '" ' +
-             'class="product-media-img img-fade" width="600" height="600" loading="lazy" decoding="async" ' +
+             'class="product-media-img img-fade" loading="lazy" decoding="async" ' +
              'onload="this.classList.add(\'is-loaded\')" ' +
              'onerror="this.onerror=null; this.classList.add(\'is-loaded\'); this.src=\'' + IMG_FALLBACK + '\';">';
     }
@@ -373,6 +404,16 @@
       paintSectionIfChanged(sec, cached, false);
     }
 
+    // الاعتماد على الفهرس المحلي فوراً إذا كان موجوداً لمنع أي استعلامات سيرفر إضافية
+    if (typeof Store.hasIndexLocal === "function" && Store.hasIndexLocal()) {
+      var idxList = getSectionFromIndex(sec.field);
+      if (idxList && idxList.length) {
+        Store.setFieldCache(sec.cache, idxList);
+        paintSectionIfChanged(sec, idxList, true);
+        return Promise.resolve();
+      }
+    }
+
     return Store.loadProductsPageByField(sec.field, true, 4, null).then(function (res) {
       var list = (res && res.products || []).filter(function (p) { return Store.isProductAvailable(p); }).slice(0, 4);
       if (!list.length) {
@@ -423,7 +464,7 @@
     }
     el.innerHTML = cats.map(function (c) {
       var media = c.image
-        ? '<img src="' + escapeHtml(window.getIkUrl(c.image, 200, 80)) + '" alt="" width="80" height="80" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'
+        ? '<img src="' + escapeHtml(window.getIkUrl(c.image, 160, 70)) + '" alt="" width="80" height="80" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:50%;background:#f0ede8;">'
         : iconSvg(c.icon || "box");
       return '<a href="products.html?cat=' + encodeURIComponent(c.id) + '" class="cat-chip"><span class="cat-icon" style="padding:0;overflow:hidden;display:flex;align-items:center;justify-content:center;">' + media + '</span><span class="name">' + escapeHtml(c.name) + "</span></a>";
     }).join("");
@@ -466,7 +507,7 @@
     clearInterval(slideInterval);
 
     if (!ads.length) {
-      if (hadSlider) heroArt.innerHTML = '<div class="hero-art-default"><img src="assets/logo/logo.png?v=69" alt="شعار المتجر" width="160" height="160" decoding="async"></div>';
+      if (hadSlider) heroArt.innerHTML = '<div class="hero-art-default"><img src="assets/logo/logo.png?v=73" alt="شعار المتجر" width="160" height="160" decoding="async"></div>';
       return;
     }
 
@@ -527,7 +568,7 @@
     HOME_SECTIONS.forEach(loadHomeSection);
 
     if (typeof Store !== "undefined" && typeof Store.ensureIndexFresh === "function") {
-      Store.ensureIndexFresh(true).then(function () {
+      Store.ensureIndexFresh().then(function () {
         syncSectionsFromFreshIndex();
       }).catch(function () {});
     }

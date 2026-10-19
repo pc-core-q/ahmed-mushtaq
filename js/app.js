@@ -1,7 +1,7 @@
 /* ==========================================================================
    app.js
    منطق مشترك بين كل صفحات المتجر: رسم الهيدر والفوتر، القائمة، الإشعارات.
-   تم التحديث: بحث عام خفيف، ودعم التحميل التراكمي للصور (Blur-up).
+   تم التحديث: توحيد مقاسات ImageKit وإلغاء طلبات الـ Blur الزائدة لتوفير الباندويث.
    ========================================================================== */
 
 /* ---------- أدوات التهريب المشتركة (متاحة لكل الصفحات) ---------- */
@@ -17,7 +17,6 @@ function escapeHtml(str) {
 
 /* يمنع روابط javascript: / data: القادمة من لوحة التحكم (انستغرام/تيك توك/إعلانات) */
 function safeUrl(url) {
-  // المتصفحات تتجاهل الأحرف الخفية/المسافات داخل المخطط (java\nscript:) لذلك نزيلها قبل الفحص
   const u = String(url === null || url === undefined ? "" : url).replace(/[\u0000-\u0020\u007f-\u009f\u2028\u2029]+/g, "");
   return /^(https?:\/\/|\/|\.\/|tel:|mailto:)/i.test(u) || (u && !/^[a-z][a-z0-9+.-]*:/i.test(u)) ? u : "#";
 }
@@ -26,10 +25,10 @@ function jsStr(value) {
   return escapeHtml(JSON.stringify(String(value === null || value === undefined ? "" : value)));
 }
 
-// ====== ImageKit: تحسين وضغط الصور وعرض النسخ الضبابية للتحميل التراكمي ======
+// ====== ImageKit: تحسين وضغط الصور بمقاسات موحدة ======
 window.getIkUrl = function(url, width, quality) {
   if (!url || typeof url !== 'string' || !url.includes("ik.imagekit.io")) return url;
-  quality = quality || 85;
+  quality = quality || 75;
   const trString = "tr:w-" + width + ",q-" + quality + ",f-webp";
   if (url.match(/\/tr:[^\/]+\//)) {
     return url.replace(/\/tr:[^\/]+\//, "/" + trString + "/");
@@ -38,18 +37,7 @@ window.getIkUrl = function(url, width, quality) {
   }
 };
 
-// توليد صورة مصغرة وضبابية جداً بحجم ضئيل (~1KB) للعرض الفوري
-window.getIkBlurUrl = function(url) {
-  if (!url || typeof url !== 'string' || !url.includes("ik.imagekit.io")) return url;
-  const trString = "tr:w-20,bl-6,q-20,f-webp";
-  if (url.match(/\/tr:[^\/]+\//)) {
-    return url.replace(/\/tr:[^\/]+\//, "/" + trString + "/");
-  } else {
-    return url.replace(/(ik\.imagekit\.io\/[^\/]+\/)/, "$1" + trString + "/");
-  }
-};
-
-// تفعيل استبدال الصورة الضبابية بالصورة الكاملة فور اكتمال التنزيل
+// تم استبدال الـ Blur بلون خلفية خفيف في CSS لمنع ازدواجية اتصالات الصور
 window.initProgressiveImages = function(scope) {
   const container = scope || document;
   const lazyImgs = container.querySelectorAll("img.progressive-img:not(.loaded)");
@@ -283,9 +271,8 @@ function initGlobalSearch() {
     }
 
     resultsBox.innerHTML = matched.map(p => {
-        const fullImg = p.image ? window.getIkUrl(p.image, 150, 75) : "";
-        const blurImg = p.image ? window.getIkBlurUrl(p.image) : "";
-        const img = p.image ? `<img src="${escapeHtml(fullImg)}" alt="${escapeHtml(p.name)}" class="progressive-img" style="background-image: url('${escapeHtml(blurImg)}'); background-size: cover;" width="62" height="62" loading="lazy" decoding="async">` : `<div class="search-img-placeholder">${iconSvg("box")}</div>`;
+        const thumbImg = p.image ? window.getIkUrl(p.image, 160, 70) : "";
+        const img = p.image ? `<img src="${escapeHtml(thumbImg)}" alt="${escapeHtml(p.name)}" class="progressive-img" width="62" height="62" loading="lazy" decoding="async" style="width:100%;height:100%;object-fit:cover;border-radius:8px;background:#f0ede8;">` : `<div class="search-img-placeholder">${iconSvg("box")}</div>`;
         return `
             <a href="product.html?id=${encodeURIComponent(p.id)}" class="search-result-item">
                 <div class="search-item-img">${img}</div>
@@ -300,7 +287,6 @@ function initGlobalSearch() {
     window.initProgressiveImages(resultsBox);
   }
 
-  // البحث عند الضغط على Enter
   input.addEventListener("keydown", function(e) {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -308,7 +294,6 @@ function initGlobalSearch() {
     }
   });
 
-  // البحث عند النقر على أيقونة العدسة
   if (submitIcon) {
     submitIcon.addEventListener("click", executeSearch);
   }

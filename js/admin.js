@@ -1,8 +1,8 @@
 /* ==========================================================================
    admin.js
    منطق لوحة تحكم الأدمن بالكامل (admin.html). 
-   تم التحديث: سقف استيراد الإكسل (STORE_CONFIG.maxExcelImportCount)، ومزامنة Algolia التلقائية،
-   وحماية الكتابة (لا حفظ للمنتجات قبل اكتمال تحميلها)، وتهريب كل نص ديناميكي (XSS).
+   تم التحديث: حصر سحب الطلبات بآخر 300 طلب مرة واحدة، وتحسين مصغرات الصور،
+   ورفع رقم إصدار الأقسام والإعلانات ws_meta_v لحظياً لتحديث الزوار فوراً.
    ========================================================================== */
 
 let editingProductId = null;
@@ -16,6 +16,19 @@ let pendingSizes = [];         // ["S", "M", ...]
 let pendingInventory = {};     // { "لون||مقاس": qty }
 
 /* ---------------------------------------------------------------------- */
+/* دالة مساعدة لرفع رقم نسخة الأقسام والإعلانات والإعدادات لحظياً         */
+/* ---------------------------------------------------------------------- */
+function bumpMetaVersion() {
+  try {
+    if (typeof firebase !== "undefined" && firebase.database) {
+      firebase.database().ref("ws_meta_v").set(Date.now());
+    }
+  } catch (err) {
+    console.warn("Failed to bump ws_meta_v:", err);
+  }
+}
+
+/* ---------------------------------------------------------------------- */
 /* ملاحظة: escapeHtml و jsStr معرّفتان في app.js (يُحمَّل قبل هذا الملف)   */
 /* ---------------------------------------------------------------------- */
 
@@ -27,14 +40,14 @@ async function initAdminPage() {
     if (!isAuthed) return;
   }
 
-  // سحب مباشر لبيانات السيرفر وتخطي الكاش
+  // سحب مباشر لبيانات السيرفر مرة واحدة بدون تكرار وسحب آخر 300 طلب فقط
   await pullFromFirebase(true);
   await Store.loadAllProductsFromFirebase(true);
-  await Store.loadOrdersFromFirebase();
+  await Store.loadOrdersFromFirebase(300);
 
   // التأكد من بناء الفهرس ومزامنته
   Store.rebuildIndex(false).then(function (ok) {
-    if (!ok) showAdminBanner("تعذّر إنشاء/قراءة فهرس المتجر ws_index. أضف قاعدة ws_index إلى Firebase Rules (انظر STORE_AI_GUIDE القسم 19) ثم حدّث الصفحة؛ حتى ذلك الحين يعمل المتجر بالطريقة القديمة (استهلاك أعلى).");
+    if (!ok) showAdminBanner("تعذّر إنشاء/قراءة فهرس المتجر ws_index. أضف قاعدة ws_index إلى Firebase Rules ثم حدّث الصفحة.");
   });
 
   // إن فشل تحميل كل المنتجات فالكاش قد يكون جزئياً: نمنع الحفظ لحماية البيانات
@@ -67,15 +80,13 @@ async function initAdminPage() {
   wireSettingsForm();
   wireExcelSync();
 
-  const productSearch = document.getElementById("adminProductSearch");
-  if (productSearch) productSearch.addEventListener("input", renderProductsTable);
+  wireProductsTableEvents();
 
   showUpdateNotice();
 }
 
 /* ---------------------------------------------------------------------- */
 /* إشعار "تم تحديث الموقع" — يظهر مرة واحدة فقط لكل إصدار                */
-/* لإظهاره مجدداً بعد تحديث جديد: غيّر UPDATE_NOTICE_ID وحدّث القائمة في admin.html */
 /* ---------------------------------------------------------------------- */
 const UPDATE_NOTICE_ID = "2026-10-19";
 const UPDATE_NOTICE_KEY = "ws_admin_update_seen";
@@ -110,7 +121,6 @@ function showAdminBanner(message) {
   main.insertBefore(box, main.firstChild);
 }
 
-// يتأكد أن حفظ المنتجات مسموح
 function ensureProductsWritable() {
   if (Store.canWriteProducts()) return true;
   showToast("لم يكتمل تحميل المنتجات من الخادم، لذلك أُوقف الحفظ لحماية بياناتك. حدّث الصفحة ثم أعد المحاولة.", "error");
@@ -506,55 +516,113 @@ function renderStats() {
 /* جدول المنتجات                                                        */
 /* ---------------------------------------------------------------------- */
 
+/* عدد الصفوف المرسومة دفعة واحدة. كان الجدول يرسم كل المنتجات (مئات/آلاف الصفوف
+   مع صورها) فيثقل اللوحة والقائمة الجانبية. الآن يُرسم جزء صغير + زر "عرض المزيد". */
+const ADMIN_PRODUCTS_PAGE_SIZE = 40;
+let adminProductsShown = ADMIN_PRODUCTS_PAGE_SIZE;
+let adminProductsLastQuery = "";
+let adminProductsSearchTimer = null;
+
+function adminProductMatches(p, q) {
+  return (p.name && String(p.name).toLowerCase().includes(q)) ||
+         (p.barcode && String(p.barcode).toLowerCase().includes(q)) ||
+         (p.sku && String(p.sku).toLowerCase().includes(q));
+}
+
+function adminProductRowHtml(p) {
+  const thumbUrl = (typeof window.getIkUrl === "function" && p.image) ? window.getIkUrl(p.image, 96, 60) : (p.image || "");
+  const img = thumbUrl
+    ? '<img src="' + escapeHtml(thumbUrl) + '" alt="" width="44" height="44" loading="lazy" decoding="async" style="width:44px;height:44px;object-fit:cover;border-radius:6px;">'
+    : '<div class="admin-table-icon">' + iconSvg("box") + "</div>";
+  const statusPill = Store.isProductAvailable(p)
+    ? '<span class="pill pill-ok">متوفر</span>'
+    : '<span class="pill pill-off" style="color: #dc2626; background: #fee2e2; border: 1px solid #fca5a5; font-weight: bold;">غير متوفر</span>';
+
+  const tags = [];
+  if (p.featured) tags.push("مميز");
+  if (p.isNew) tags.push("جديد");
+  if (p.isOffer) tags.push("عرض🔥");
+
+  const code = p.barcode || p.sku;
+  const barcodeDisplay = code
+    ? '<span style="font-family:monospace; background:var(--olive-50); padding:3px 8px; border-radius:6px; border:1px solid var(--line); font-size:0.85rem;">' + escapeHtml(code) + "</span>"
+    : '<span style="color:var(--ink-300); font-size:0.85rem;">—</span>';
+
+  const id = escapeHtml(p.id);
+  return (
+    "<tr>" +
+      "<td>" + img + "</td>" +
+      "<td>" + barcodeDisplay + "</td>" +
+      "<td>" + escapeHtml(p.name) + (tags.length ? ' <span class="field-hint" style="color:var(--danger);">(' + tags.join(" / ") + ")</span>" : "") + "</td>" +
+      "<td>" + escapeHtml(Store.getCategoryName(p.categoryId)) + "</td>" +
+      "<td>" + formatPrice(p.price) + "</td>" +
+      "<td>" + p.stock + "</td>" +
+      "<td>" + statusPill + "</td>" +
+      '<td class="row-actions">' +
+        '<button class="btn-icon btn-sm" title="تعديل" data-act="edit" data-id="' + id + '">' + iconSvg("edit") + "</button>" +
+        '<button class="btn-icon btn-sm" title="حذف" data-act="del" data-id="' + id + '">' + iconSvg("trash") + "</button>" +
+      "</td>" +
+    "</tr>"
+  );
+}
+
 function renderProductsTable() {
   const tbody = document.getElementById("productsTableBody");
   if (!tbody) return;
 
-  const query = (document.getElementById("adminProductSearch") || {}).value || "";
-  let products = Store.getProducts();
-  if (query.trim()) {
-    const q = query.trim().toLowerCase();
-    products = products.filter(function (p) { 
-      return (p.name && p.name.toLowerCase().includes(q)) || 
-             (p.barcode && String(p.barcode).toLowerCase().includes(q)) || 
-             (p.sku && String(p.sku).toLowerCase().includes(q)); 
-    });
+  const query = ((document.getElementById("adminProductSearch") || {}).value || "").trim().toLowerCase();
+  // تغيّر البحث → ارجع لأول صفحة. (الحفظ/الحذف يبقيان على عدد الصفوف المعروضة)
+  if (query !== adminProductsLastQuery) {
+    adminProductsLastQuery = query;
+    adminProductsShown = ADMIN_PRODUCTS_PAGE_SIZE;
   }
 
-  if (!products.length) {
+  let products = Store.getProducts().filter(Boolean);
+  if (query) products = products.filter(function (p) { return adminProductMatches(p, query); });
+
+  const total = products.length;
+  if (!total) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--ink-300);">لا توجد منتجات</td></tr>';
     return;
   }
 
-  tbody.innerHTML = products.map(function (p) {
-    const img = p.image ? '<img src="' + escapeHtml(p.image) + '" alt="">' : '<div class="admin-table-icon">' + iconSvg("box") + "</div>";
-    const statusPill = Store.isProductAvailable(p)
-      ? '<span class="pill pill-ok">متوفر</span>'
-      : '<span class="pill pill-off" style="color: #dc2626; background: #fee2e2; border: 1px solid #fca5a5; font-weight: bold;">غير متوفر</span>';
+  const visible = products.slice(0, adminProductsShown);
+  let html = visible.map(adminProductRowHtml).join("");
+  if (total > visible.length) {
+    html += '<tr class="admin-more-row"><td colspan="8" style="text-align:center;padding:16px;">' +
+      '<button type="button" class="btn btn-outline btn-sm" data-act="more">عرض المزيد (' + visible.length + " من " + total + ")</button>" +
+      "</td></tr>";
+  }
+  tbody.innerHTML = html;
+}
 
-    const tags = [];
-    if (p.featured) tags.push("مميز");
-    if (p.isNew) tags.push("جديد");
-    if (p.isOffer) tags.push("عرض🔥"); 
-
-    const barcodeDisplay = p.barcode || p.sku ? `<span style="font-family:monospace; background:var(--olive-50); padding:3px 8px; border-radius:6px; border:1px solid var(--line); font-size:0.85rem;">${escapeHtml(p.barcode || p.sku)}</span>` : '<span style="color:var(--ink-300); font-size:0.85rem;">—</span>';
-
-    return (
-      "<tr>" +
-        "<td>" + img + "</td>" +
-        "<td>" + barcodeDisplay + "</td>" +
-        "<td>" + escapeHtml(p.name) + (tags.length ? ' <span class="field-hint" style="color:var(--danger);">(' + tags.join(" / ") + ")</span>" : "") + "</td>" +
-        "<td>" + escapeHtml(Store.getCategoryName(p.categoryId)) + "</td>" +
-        "<td>" + formatPrice(p.price) + "</td>" +
-        "<td>" + p.stock + "</td>" +
-        "<td>" + statusPill + "</td>" +
-        '<td class="row-actions">' +
-          '<button class="btn-icon btn-sm" title="تعديل" onclick="openProductModal(' + jsStr(p.id) + ')">' + iconSvg("edit") + "</button>" +
-          '<button class="btn-icon btn-sm" title="حذف" onclick="deleteProductConfirm(' + jsStr(p.id) + ')">' + iconSvg("trash") + "</button>" +
-        "</td>" +
-      "</tr>"
-    );
-  }).join("");
+// مستمع واحد للجدول كله (بدل onclick داخل كل صف) + بحث مؤجَّل لتجنب إعادة الرسم مع كل حرف
+function wireProductsTableEvents() {
+  const tbody = document.getElementById("productsTableBody");
+  if (tbody && !tbody.dataset.wired) {
+    tbody.dataset.wired = "1";
+    tbody.addEventListener("click", function (e) {
+      const btn = e.target.closest ? e.target.closest("button[data-act]") : null;
+      if (!btn) return;
+      const act = btn.dataset.act;
+      if (act === "more") {
+        adminProductsShown += ADMIN_PRODUCTS_PAGE_SIZE;
+        renderProductsTable();
+      } else if (act === "edit") {
+        openProductModal(btn.dataset.id);
+      } else if (act === "del") {
+        deleteProductConfirm(btn.dataset.id);
+      }
+    });
+  }
+  const search = document.getElementById("adminProductSearch");
+  if (search && !search.dataset.wired) {
+    search.dataset.wired = "1";
+    search.addEventListener("input", function () {
+      clearTimeout(adminProductsSearchTimer);
+      adminProductsSearchTimer = setTimeout(renderProductsTable, 250);
+    });
+  }
 }
 
 async function deleteProductConfirm(id) {
@@ -611,7 +679,7 @@ function renderColorsList() {
           
           '<div style="display:flex;flex-direction:column;gap:5px;align-items:center;">' +
             '<label style="font-size:0.8rem;color:var(--ink-400);">الدرجة</label>' +
-            '<input type="color" value="' + escapeHtml(/^#[0-9a-fA-F]{6}$/.test(c.hex || "") ? c.hex : "#7c9a4c") + '" data-color-idx="' + idx + '" class="color-hex-input" style="width:38px;height:38px;padding:0;border:none;cursor:pointer;border-radius:50%;">' +
+            '<input type="color" value="' + escapeHtml(/^#[0-9a-fA-F]{6}$/.test(c.hex || "") ? c.hex : "#7c9a4c") + '" data-color-idx="' + idx + '" class="color-hex-input" style="width:38px;height:38px;padding:0;border:none;cursor:border-radius:50%;">' +
           '</div>' +
           
           '<div class="image-upload" style="margin:0;display:flex;flex-direction:column;gap:5px;min-width:120px;">' +
@@ -1029,7 +1097,8 @@ function renderCategoriesTable() {
 
   tbody.innerHTML = categories.map(function (c) {
     const count = products.filter(function (p) { return p.categoryId === c.id; }).length;
-    const img = c.image ? '<img src="' + escapeHtml(c.image) + '" alt="">' : '<div class="admin-table-icon">' + iconSvg(c.icon || "box") + "</div>";
+    const thumbUrl = (typeof window.getIkUrl === "function" && c.image) ? window.getIkUrl(c.image, 160, 70) : (c.image || "");
+    const img = thumbUrl ? '<img src="' + escapeHtml(thumbUrl) + '" alt="" style="width:40px;height:40px;object-fit:cover;border-radius:50%;">' : '<div class="admin-table-icon">' + iconSvg(c.icon || "box") + "</div>";
     
     const parent = c.parentId ? categories.find(function(x) { return x.id === c.parentId; }) : null;
     const displayName = parent 
@@ -1064,6 +1133,7 @@ function deleteCategoryConfirm(id) {
     : 'هل تريد حذف القسم "' + category.name + '"؟';
   if (confirm(msg)) {
     Store.deleteCategory(id);
+    bumpMetaVersion();
     renderCategoriesTable();
     populateCategorySelect();
     renderStats();
@@ -1207,6 +1277,7 @@ function saveCategoryForm(e) {
     showToast("تمت إضافة القسم", "success");
   }
 
+  bumpMetaVersion();
   closeCategoryModal();
   renderCategoriesTable();
   populateCategorySelect();
@@ -1224,7 +1295,8 @@ function renderAdsTable() {
   }
 
   tbody.innerHTML = ads.map(function (ad) {
-    const img = ad.image ? '<img src="' + escapeHtml(ad.image) + '" alt="" style="width:80px;height:40px;border-radius:4px;object-fit:cover;">' : '<div class="admin-table-icon">' + iconSvg("image") + "</div>";
+    const thumbUrl = (typeof window.getIkUrl === "function" && ad.image) ? window.getIkUrl(ad.image, 160, 70) : (ad.image || "");
+    const img = thumbUrl ? '<img src="' + escapeHtml(thumbUrl) + '" alt="" style="width:80px;height:40px;border-radius:4px;object-fit:cover;">' : '<div class="admin-table-icon">' + iconSvg("image") + "</div>";
     const link = ad.link ? '<a href="' + escapeHtml(safeUrl(ad.link)) + '" rel="noopener noreferrer" target="_blank" style="color:var(--olive-700);text-decoration:underline;">عرض الرابط</a>' : '-';
     
     return (
@@ -1243,6 +1315,7 @@ function renderAdsTable() {
 function deleteAdConfirm(id) {
   if (confirm('هل تريد حذف هذا الإعلان؟')) {
     Store.deleteAd(id);
+    bumpMetaVersion();
     renderAdsTable();
     showToast("تم حذف الإعلان", "success");
   }
@@ -1321,6 +1394,7 @@ function saveAdForm(e) {
   };
 
   Store.addAd(data);
+  bumpMetaVersion();
   showToast("تمت إضافة الإعلان بنجاح", "success");
   closeAdModal();
   renderAdsTable();
@@ -1444,7 +1518,7 @@ function renderOrdersTable() {
 
       return (
         '<li class="order-item">' +
-          '<span class="order-item-qty">' + qty + '×</span>' +
+          '<span class="order-item-qty" dir="ltr">×' + qty + '</span>' +
           '<span class="order-item-name">' + escapeHtml(it.name || "منتج") + optHtml + '</span>' +
         '</li>'
       );
@@ -1543,6 +1617,7 @@ function wireSettingsForm() {
     };
 
     Store.saveSettings(patch);
+    bumpMetaVersion();
     showToast("تم حفظ الإعدادات بنجاح", "success");
   });
 }
