@@ -25,9 +25,39 @@ function jsStr(value) {
   return escapeHtml(JSON.stringify(String(value === null || value === undefined ? "" : value)));
 }
 
+/* صورة بديلة مضمّنة (SVG بلا أي طلب شبكة) تُعرض عند فشل الصورة نهائياً */
+window.IMG_PLACEHOLDER = "data:image/svg+xml," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">' +
+  '<rect width="600" height="600" fill="#f3f4f6"/>' +
+  '<g fill="none" stroke="#b9bec9" stroke-width="14" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M300 190 390 240V345L300 395 210 345V240Z"/><path d="M210 240 300 290 390 240M300 290V395"/></g></svg>'
+);
+
 // ====== ImageKit: تحسين وضغط الصور بمقاسات موحدة ======
+/* رابط ImageKit ← رابط ImgBB الأصلي (نفس المسار). يرجع "" إن لم يكن رابط ImageKit.
+   مثال: ik.imagekit.io/ID/tr:w-900,q-85,f-webp/AbCd/p.jpg  ←  i.ibb.co/AbCd/p.jpg */
+window.ikToOrigin = function(url) {
+  if (!url || typeof url !== 'string') return "";
+  var m = url.match(/^https?:\/\/ik\.imagekit\.io\/[^\/]+\/(?:tr:[^\/]+\/)?([^?#]+)/);
+  return m && m[1] ? "https://i.ibb.co/" + m[1] : "";
+};
+
+/* قاطع الدائرة: إذا فشلت 3 صور من ImageKit ولم تنجح أي صورة منه في هذه الصفحة
+   (باقة منتهية أو عطل) تُحمَّل كل الصور من ImgBB مباشرة لمدة 30 دقيقة، دون انتظار فشل كل صورة. */
+var IK_DOWN_KEY = "ws_ik_down";
+var IK_DOWN_MS = 30 * 60 * 1000;
+function isIkDown() {
+  try {
+    var t = parseInt(sessionStorage.getItem(IK_DOWN_KEY) || "0", 10);
+    return t > 0 && (Date.now() - t) < IK_DOWN_MS;
+  } catch (e) { return false; }
+}
+var ikFailCount = 0;
+var ikAnyLoaded = false;
+
 window.getIkUrl = function(url, width, quality) {
   if (!url || typeof url !== 'string' || !url.includes("ik.imagekit.io")) return url;
+  if (isIkDown()) return window.ikToOrigin(url) || url;
   quality = quality || 75;
   const trString = "tr:w-" + width + ",q-" + quality + ",f-webp";
   if (url.match(/\/tr:[^\/]+\//)) {
@@ -36,6 +66,27 @@ window.getIkUrl = function(url, width, quality) {
     return url.replace(/(ik\.imagekit\.io\/[^\/]+\/)/, "$1" + trString + "/");
   }
 };
+
+/* احتياطي تلقائي لكل <img> في الموقع: عند فشل صورة ImageKit تُجرَّب نسختها من ImgBB مرة واحدة.
+   يعمل في مرحلة الالتقاط فيسبق معالجات onerror الموجودة (التي تعرض الصورة البديلة فقط إن فشل ImgBB أيضاً). */
+document.addEventListener("load", function(e) {
+  var t = e.target;
+  if (t && t.tagName === "IMG" && typeof t.src === "string" && t.src.indexOf("ik.imagekit.io") !== -1) ikAnyLoaded = true;
+}, true);
+
+document.addEventListener("error", function(e) {
+  var t = e.target;
+  if (!t || t.tagName !== "IMG" || t.dataset.ikFallback) return;
+  var origin = window.ikToOrigin(t.currentSrc || t.src);
+  if (!origin) return;
+  t.dataset.ikFallback = "1";
+  ikFailCount++;
+  if (ikFailCount >= 3 && !ikAnyLoaded) {
+    try { sessionStorage.setItem(IK_DOWN_KEY, String(Date.now())); } catch (err) {}
+  }
+  e.stopImmediatePropagation();
+  t.src = origin;
+}, true);
 
 // تم استبدال الـ Blur بلون خلفية خفيف في CSS لمنع ازدواجية اتصالات الصور
 window.initProgressiveImages = function(scope) {
